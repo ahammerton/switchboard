@@ -60,6 +60,8 @@ To edit the dashboard, click ✏️ in the top-right corner or press **E**. Pres
 
 Switchboard is meant for your **home network**, or for use behind a reverse proxy that adds its own login. Don't expose it directly to the internet.
 
+To report a vulnerability privately, see [SECURITY.md](SECURITY.md).
+
 - **Edit token.** Every change needs the edit token: saving the config, API keys, uploads, alert tests, widget tests and Find services. Viewing the dashboard doesn't. Ten wrong tokens in a minute from one address locks that address out for a minute.
 - **Other websites can't use it.** Changes are only accepted from the dashboard's own page: the browser's `Origin` and `Sec-Fetch-Site` headers are checked, and requests must be JSON. So a web page you visit can't quietly make your server scan the network or fetch URLs. Scripts and `curl` still work, with the token.
 - **DNS rebinding is blocked.** The server only answers under host names it knows (see `ALLOWED_HOSTS`). This stops a malicious site from pointing its own domain at your server to read your config. If you open the dashboard through a public domain, for example a reverse-proxy name like `dash.example.com`, add it to `ALLOWED_HOSTS`, or you'll get an error page naming the setting.
