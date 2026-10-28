@@ -2,6 +2,14 @@
 
 Switchboard is a small, self-hosted start page for your home lab. It has no dependencies: one Python file serves a vanilla HTML/JS front end.
 
+![Switchboard's Home tab: service tiles with live stats from Home Assistant, Proxmox, Portainer, Gitea, UniFi and Pi-hole, plus weather, clock and system stats](docs/screenshots/home-normal.png)
+
+| Glass style | App widgets | Upcoming tab |
+|---|---|---|
+| ![The Glass interface style](docs/screenshots/home-glass.png) | ![Media tab with Plex, Jellyfin, Seerr and *arr widgets](docs/screenshots/media.png) | ![Upcoming tab: TV episodes and films by day](docs/screenshots/upcoming.png) |
+
+*Screenshots show a demo setup with made-up data.*
+
 - **Tabs** to keep related services on their own page (e.g. Home, Media, Network). Switch with the keys **1**–**9**, or link straight to one with `#tab-name`
 - Service tiles arranged in groups, with icons, descriptions and **live online/offline status**
 - **App widgets**: live stats from your apps' APIs shown on their tiles. Built in for the *arr suite, Seerr, Plex, Jellyfin, Emby, Tautulli, Komga, BookOrbit, Magarr, Proxmox, Portainer, Dockge, UniFi, Pi-hole, AdGuard Home, Technitium, Gitea, Home Assistant, Mealie, Immich, qBittorrent, SABnzbd and NZBGet, plus any other JSON API
