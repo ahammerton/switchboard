@@ -1,0 +1,20 @@
+# Opens pull requests when the build workflow's actions or the Docker base
+# image have a newer version. Switchboard has no Python package dependencies.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]   # one pull request for all action updates
+    commit-message:
+      prefix: "ci"
+
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: "docker"
