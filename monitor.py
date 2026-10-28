@@ -166,6 +166,7 @@ def send(events, kind, url, source):
         else:
             _post_json(url, {"source": source, "time": stamp, "events": events}, verify=False)
     except urllib.error.HTTPError as e:
+        e.close()
         raise RuntimeError(f"HTTP {e.code} from the webhook") from None
     except urllib.error.URLError as e:
         raise RuntimeError(f"can't reach the webhook: {e.reason}") from None

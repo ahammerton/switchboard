@@ -95,6 +95,7 @@ class Ctx:
                 body = res.read(MAX_BYTES + 1)
                 resp_headers = res.headers
         except urllib.error.HTTPError as e:
+            e.close()  # free the connection; only the status matters
             raise WidgetError(_friendly_http_error(e.code), e.code) from None
         except urllib.error.URLError as e:
             raise WidgetError(f"can't connect: {e.reason}") from None

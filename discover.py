@@ -122,6 +122,8 @@ def _get(url):
             body = e.read(MAX_BODY)
         except OSError:
             body = b""
+        finally:
+            e.close()
         return e.code, e.headers, body, url
     except Exception:  # TLS on a plain port, resets, timeouts…
         return None

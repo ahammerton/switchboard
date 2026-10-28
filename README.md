@@ -31,7 +31,7 @@ Switchboard is a small, self-hosted start page for your home lab. It has no depe
 
 ## Run it
 
-**Python** (3.8 or newer, no packages needed; tested on 3.12 and 3.14):
+**Python** (3.9 or newer, no packages needed):
 
 ```sh
 python3 server.py
@@ -311,6 +311,28 @@ To add a new built-in app, write a small `fetch(ctx)` function and add it to the
 - Set `check` to `false` for external bookmarks that don't need a status dot.
 
 A service counts as **online** when it answers with any HTTP status below 500.
+
+## Development
+
+The tests use only Python's built-in `unittest`, so there's nothing to install. Run them from the repository root:
+
+```sh
+python3 -m unittest discover -s tests -t .
+```
+
+They include:
+
+- **Mock versions of every app** with a widget, copying each app's API and how it checks logins
+- **The real server** started in a temporary folder, to test the edit token, cross-site and DNS rebinding protection, and uploads
+- **Alerts, uptime history, Find services and system stats**, using fake Linux `/proc` and `/sys` folders
+
+GitHub Actions runs them on Python 3.9 to 3.13 for every push and pull request, and only publishes an image when they all pass. `docker build --target test .` runs them inside the image's base Python.
+
+To add a widget:
+
+1. Write a `fetch(ctx)` function in `widgets.py` and add it to `PRESETS`.
+2. Add a mock of the app to `tests/mock_apps.py`.
+3. Add a test to `tests/test_widgets.py`.
 
 ## Credits
 

@@ -377,6 +377,7 @@ def check_url(url):
             code = res.status
     except urllib.error.HTTPError as e:
         code = e.code
+        e.close()
     except Exception as e:  # connection refused, timeout, DNS...
         return {"up": False, "error": str(getattr(e, "reason", e))}
     return {"up": code < 500, "code": code, "ms": round((time.monotonic() - start) * 1000)}
@@ -562,6 +563,7 @@ def fetch_feed(url):
             return {"error": "feed is too large"}
         return parse_feed(data)
     except urllib.error.HTTPError as e:
+        e.close()
         return {"error": f"HTTP {e.code}"}
     except ET.ParseError:
         return {"error": "not a valid RSS/Atom feed"}

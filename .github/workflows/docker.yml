@@ -1,5 +1,6 @@
-# Builds the image for amd64 and arm64 and publishes it to GitHub's container
-# registry as ghcr.io/<owner>/switchboard.
+# Runs the tests on every supported Python version, then builds the image for
+# amd64 and arm64 and publishes it to GitHub's container registry as
+# ghcr.io/<owner>/switchboard. Nothing is published if any test fails.
 #   push to main      -> :latest and :sha-<short sha>
 #   tag v1.2.3        -> :1.2.3, :1.2 and :1
 #   pull request      -> build only, nothing published
@@ -16,7 +17,24 @@ permissions:
   packages: write
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Tests
+        run: python -m unittest discover -s tests -t . -v
+      - name: Front-end syntax
+        run: node --check public/app.js
+
   image:
+    needs: test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

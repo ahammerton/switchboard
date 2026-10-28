@@ -6,6 +6,15 @@ and versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **A test suite.** It covers all 29 widgets (against mock apps), the server's security checks, alerts, uptime history, Find services and system stats, plus a front-end check. It runs on Python 3.9 to 3.13 in GitHub Actions, and images are only published when it passes.
+
+### Changed
+- **Python 3.9 or newer is now required.** 3.8 is past end-of-life.
+
+### Fixed
+- **Error responses from apps are now closed properly.** Before, an app answering with an error status left its connection open until the server cleaned it up.
+
 ## [0.1.0] - 2026-10-28
 
 The first public release.

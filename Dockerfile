@@ -1,3 +1,10 @@
+# Test stage: `docker build --target test .` runs the test suite.
+# It isn't part of the published image (the last stage below is).
+FROM python:3.12-alpine AS test
+WORKDIR /src
+COPY . .
+RUN python -m unittest discover -s tests -t .
+
 FROM python:3.12-alpine
 WORKDIR /app
 COPY server.py widgets.py sysstats.py monitor.py discover.py default-config.json ./
