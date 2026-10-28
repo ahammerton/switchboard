@@ -1,0 +1,22 @@
+services:
+  switchboard:
+    build: .
+    container_name: switchboard
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./config:/app/config
+      # System stats: mount host drives read-only to show their free space, then
+      # list the mounted paths in the stats bar's Edit dialog, e.g. "/host/media = Media".
+      # - /mnt/media:/host/media:ro
+    environment:
+      # An edit token is generated on first start (see `docker logs switchboard`).
+      # Set your own here instead, or "off" to allow changes without one.
+      # - EDIT_TOKEN=change-me
+      # Public host names you open the dashboard under, e.g. a reverse-proxy name.
+      # IPs, localhost and .lan/.local/.home.arpa/.internal names always work.
+      # - ALLOWED_HOSTS=dash.example.com
+      - TZ=Europe/London
+      # Name shown in the system stats bar (otherwise the container ID is shown)
+      # - HOST_NAME=homelab

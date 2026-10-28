@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Switchboard</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏠</text></svg>">
+  <link rel="stylesheet" href="style.css">
+  <script>try { var s = localStorage.getItem("uiStyle"); if (s) document.documentElement.dataset.ui = s; } catch (e) {}</script>
+</head>
+<body>
+  <div class="bg" id="bg"></div>
+
+  <div class="toolbar">
+    <button class="icon-btn" id="uiToggle" title="Switch interface style (G)" aria-pressed="false">✨</button>
+    <button class="icon-btn" id="editToggle" title="Edit dashboard (E)">✏️</button>
+    <div class="edit-only toolbar-group">
+      <button class="btn" id="openSettings">Settings</button>
+      <button class="btn" id="openAlerts">Alerts</button>
+      <button class="btn" id="openJson">JSON</button>
+      <button class="btn" id="exportCfg">Export</button>
+      <label class="btn">Import<input type="file" id="importCfg" accept="application/json" hidden></label>
+    </div>
+  </div>
+
+  <main class="wrap">
+    <header class="hero">
+      <div>
+        <p class="greeting" id="greeting"></p>
+        <h1 id="title"></h1>
+        <p class="subtitle" id="subtitle"></p>
+      </div>
+      <div class="hero-side">
+        <div class="weather hidden" id="weather" aria-live="polite"></div>
+        <div class="clock" id="clock">
+          <div class="time" id="clockTime"></div>
+          <div class="date" id="clockDate"></div>
+        </div>
+      </div>
+    </header>
+
+    <form class="search" id="search" autocomplete="off">
+      <input type="search" id="searchInput" placeholder="Search the web or filter services…  ( / )">
+    </form>
+
+    <section class="sysbar hidden" id="sysbar" aria-label="System stats"></section>
+
+    <nav class="tabs" id="tabs" role="tablist"></nav>
+
+    <div id="groups"></div>
+  </main>
+
+  <dialog id="modal">
+    <form method="dialog" id="modalForm">
+      <h2 id="modalTitle"></h2>
+      <div id="modalBody"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn danger" id="modalDelete" hidden>Delete</button>
+        <span class="spacer"></span>
+        <button type="button" class="btn" id="modalCancel">Cancel</button>
+        <button type="submit" class="btn primary">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
