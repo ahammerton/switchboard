@@ -7,7 +7,7 @@ Switchboard is a small, self-hosted start page for your home lab. It has no depe
 - **App widgets**: live stats from your apps' APIs shown on their tiles. Built in for the *arr suite, Seerr, Plex, Jellyfin, Emby, Tautulli, Komga, BookOrbit, Magarr, Proxmox, Portainer, Dockge, UniFi, Pi-hole, AdGuard Home, Technitium, Gitea, Home Assistant, Mealie, Immich, qBittorrent, SABnzbd and NZBGet, plus any other JSON API
 - **Alerts to Discord** (or any JSON webhook) when a service goes down or comes back, an app widget shows a warning, or the host runs hot or short of RAM or disk. Checks run on the server, so alerts arrive even when nobody has the page open
 - **24-hour uptime bars** on every checked tile
-- **Upcoming tab**: one calendar combining your Sonarr, Radarr, Lidarr and Readarr, grouped by day and marked Downloaded or Missing
+- **Upcoming tab**: one calendar combining your Sonarr, Radarr, Lidarr, Readarr and Magarr, grouped by day and marked Downloaded or Missing
 - **System stats bar** for the machine running the dashboard: CPU usage and temperature, free RAM, free space on each disk you list, load and uptime. Turn it on or off in Settings
 - **Weather widget** showing current conditions and a 3-day forecast, from [Open-Meteo](https://open-meteo.com). It's free and needs no API key
 - **News tab (RSS reader)** showing your RSS and Atom feeds as cards. Switch it on or off in Settings. It comes with sample feeds, including GitHub release feeds so you can see when your self-hosted apps have updates
