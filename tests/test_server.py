@@ -219,6 +219,16 @@ class WidgetAndSecretTests(unittest.TestCase):
         self.assertEqual(self.sb.request("PUT", "/api/secrets/son", {"apiKey": "x"})[0], 401)
         self.assertEqual(self.sb.request("PUT", "/api/secrets/..%2Fx", {}, token="tok")[0], 400)
 
+    def test_a_saved_secret_can_be_removed(self):
+        put = lambda body: self.sb.request("PUT", "/api/secrets/tmp", body, token="tok")[0]
+        self.assertEqual(put({"apiKey": "k", "password": "p"}), 200)
+        self.assertEqual(put({"apiKey": ""}), 200)  # blank keeps the saved value
+        self.assertEqual(self.sb.request("GET", "/api/secrets/tmp")[1], {"set": ["apiKey", "password"]})
+        self.assertEqual(put({"apiKey": None}), 200)  # null removes it, which the edit dialog relies on
+        self.assertEqual(self.sb.request("GET", "/api/secrets/tmp")[1], {"set": ["password"]})
+        self.assertEqual(put({"password": None}), 200)
+        self.assertEqual(self.sb.request("GET", "/api/secrets/tmp")[1], {"set": []})
+
     def test_widget_test_endpoint_uses_stored_secrets(self):
         body = {"id": "son", "url": self.sonarr.url, "widget": {"type": "sonarr"}, "secrets": {"apiKey": ""}}
         r = self.sb.request("POST", "/api/widgets/test", body, token="tok")[1]

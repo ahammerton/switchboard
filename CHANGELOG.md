@@ -13,6 +13,7 @@ and versions follow [Semantic Versioning](https://semver.org/).
 - **Python 3.9 or newer is now required.** 3.8 is past end-of-life.
 
 ### Fixed
+- **A saved widget API key can now be removed.** Leaving the field blank keeps the saved key, so there was no way to delete one short of removing the widget or the service. Saved keys now have a **Remove saved key** button.
 - **Error responses from apps are now closed properly.** Before, an app answering with an error status left its connection open until the server cleaned it up.
 
 ## [0.1.0] - 2026-10-28

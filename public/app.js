@@ -1198,7 +1198,23 @@ function widgetOptions(select, values) {
         input.value = val;
       }
       input.dataset.key = (secret ? "secrets." : "widget.options.") + o.key;
-      box.append(el("div", { class: "field" }, el("label", { for: id }, o.label), input, o.hint ? el("span", { class: "hint" }, o.hint) : null));
+      let remove = null;
+      if (saved) {
+        // a saved secret is never sent to the browser, so blank means "keep": offer an explicit remove
+        remove = el("button", { type: "button", class: "btn small", onclick: () => {
+          input.value = "";
+          input.dataset.cleared = "1";
+          input.required = false;
+          input.placeholder = "Will be removed when you save";
+          remove.disabled = true;
+        } }, "Remove saved key");
+        input.addEventListener("input", () => {
+          if (!input.value) return;
+          delete input.dataset.cleared; // typing a new value replaces it instead
+          remove.disabled = false;
+        });
+      }
+      box.append(el("div", { class: "field" }, el("label", { for: id }, o.label), input, remove, o.hint ? el("span", { class: "hint" }, o.hint) : null));
     }
 
     const url = el("input", { id: "w_url", type: "text", placeholder: "Leave blank to use the service URL's host and port" });
@@ -1277,6 +1293,10 @@ async function editService(ti, gi, si) {
       const svc = id ? { id, ...v } : v;
 
       const toStore = Object.fromEntries(Object.entries(secrets).filter(([, x]) => x));
+      // null tells the server to delete a saved secret (see update_secrets in server.py)
+      document.querySelectorAll('#modalBody [data-cleared="1"]').forEach((inp) => {
+        toStore[inp.dataset.key.slice("secrets.".length)] = null;
+      });
       if (svc.widget && Object.keys(toStore).length) {
         ensureToken();
         await api("PUT", `/api/secrets/${encodeURIComponent(id)}`, toStore); // throws → dialog stays open
