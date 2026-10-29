@@ -1227,6 +1227,11 @@ function widgetOptions(select, values) {
     const result = el("div", { class: "tile-stats widget-test-result" });
     box.append(el("div", { class: "widget-test" },
       el("button", { type: "button", class: "btn small", onclick: () => testWidget(box, select, values, result) }, "Test connection"),
+      el("button", {
+        type: "button", class: "btn small danger", disabled: !savedSecrets.length,
+        title: savedSecrets.length ? "Remove the saved API key from the server" : "No API key saved",
+        onclick: () => deleteSecrets(values.id, savedSecrets).then((ok) => { if (ok) { savedSecrets = []; draw(); } }),
+      }, "Delete API key"),
       result));
   };
 
@@ -1238,6 +1243,21 @@ function widgetOptions(select, values) {
       .catch(() => {});
   }
   return box;
+}
+
+/** Remove a service's saved secrets now, without saving the rest of the dialog. */
+async function deleteSecrets(id, keys) {
+  if (!confirm("Delete the saved API key for this service? The widget stops working until you add a new one.")) return false;
+  try {
+    ensureToken();
+    await api("PUT", `/api/secrets/${encodeURIComponent(id)}`, Object.fromEntries(keys.map((k) => [k, null])));
+    toast("API key deleted");
+    refreshWidgets();
+    return true;
+  } catch (err) {
+    toast("Couldn't delete the API key: " + err.message, true);
+    return false;
+  }
 }
 
 async function testWidget(box, select, values, result) {

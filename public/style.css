@@ -312,6 +312,7 @@ body.editing #editToggle { background: var(--accent); border-color: var(--accent
 .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
 .btn.danger { color: var(--down); }
 .btn.small { padding: 3px 8px; font-size: 12px; }
+.btn:disabled { opacity: .45; cursor: not-allowed; border-color: var(--border); }
 
 .edit-only { display: none !important; }
 body.editing .edit-only { display: flex !important; }
