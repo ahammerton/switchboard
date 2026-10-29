@@ -219,6 +219,12 @@ class WidgetAndSecretTests(unittest.TestCase):
         self.assertEqual(self.sb.request("PUT", "/api/secrets/son", {"apiKey": "x"})[0], 401)
         self.assertEqual(self.sb.request("PUT", "/api/secrets/..%2Fx", {}, token="tok")[0], 400)
 
+    def test_secrets_can_be_deleted(self):
+        put = lambda body: self.sb.request("PUT", "/api/secrets/tmp", body, token="tok")
+        self.assertEqual(put({"apiKey": "x", "password": "y"})[0], 200)
+        self.assertEqual(put({"apiKey": None, "password": None})[0], 200)
+        self.assertEqual(self.sb.request("GET", "/api/secrets/tmp")[1], {"set": []})
+
     def test_widget_test_endpoint_uses_stored_secrets(self):
         body = {"id": "son", "url": self.sonarr.url, "widget": {"type": "sonarr"}, "secrets": {"apiKey": ""}}
         r = self.sb.request("POST", "/api/widgets/test", body, token="tok")[1]

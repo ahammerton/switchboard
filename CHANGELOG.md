@@ -6,13 +6,19 @@ and versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-29
+
 ### Added
+
 - **A test suite.** It covers all 29 widgets (against mock apps), the server's security checks, alerts, uptime history, Find services and system stats, plus a front-end check. It runs on Python 3.9 to 3.13 in GitHub Actions, and images are only published when it passes.
+- **Delete API key button** in a widget's settings. It removes the saved key without removing the widget, and it is greyed out when no key is saved.
 
 ### Changed
+
 - **Python 3.9 or newer is now required.** 3.8 is past end-of-life.
 
 ### Fixed
+
 - **Error responses from apps are now closed properly.** Before, an app answering with an error status left its connection open until the server cleaned it up.
 
 ## [0.1.0] - 2026-10-28
@@ -64,5 +70,6 @@ The first public release.
 - **Changes are only accepted from the dashboard's own page.** The browser's `Origin` and `Sec-Fetch-Site` headers are checked, and request bodies must be JSON. This blocks cross-site request forgery.
 - **Requests for unknown public host names are refused**, which blocks DNS rebinding. Add the names you use, such as reverse-proxy domains, to `ALLOWED_HOSTS`.
 
-[Unreleased]: https://github.com/ahammerton/switchboard/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/ahammerton/switchboard/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/ahammerton/switchboard/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/ahammerton/switchboard/releases/tag/v0.1.0
