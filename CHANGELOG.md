@@ -6,6 +6,12 @@ and versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-11-02
+
+### Added
+
+- **Images on Docker Hub** as `cyrune/switchboard`, alongside `ghcr.io/ahammerton/switchboard`.
+
 ## [0.2.1] - 2026-11-02
 
 ### Fixed
@@ -76,7 +82,8 @@ The first public release.
 - **Changes are only accepted from the dashboard's own page.** The browser's `Origin` and `Sec-Fetch-Site` headers are checked, and request bodies must be JSON. This blocks cross-site request forgery.
 - **Requests for unknown public host names are refused**, which blocks DNS rebinding. Add the names you use, such as reverse-proxy domains, to `ALLOWED_HOSTS`.
 
-[Unreleased]: https://github.com/ahammerton/switchboard/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/ahammerton/switchboard/compare/v0.2.2...HEAD
+[0.2.2]: https://github.com/ahammerton/switchboard/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/ahammerton/switchboard/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/ahammerton/switchboard/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/ahammerton/switchboard/releases/tag/v0.1.0

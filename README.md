@@ -44,6 +44,8 @@ python3 server.py
 docker run -d --name switchboard -p 3000:3000 -v ./config:/app/config ghcr.io/ahammerton/switchboard:latest
 ```
 
+The same image is on Docker Hub as [`cyrune/switchboard`](https://hub.docker.com/r/cyrune/switchboard). `latest` follows the main branch, and release tags such as `0.2.1`, `0.2` and `0` follow releases.
+
 Or build it yourself with `docker compose up -d --build`, using the `docker-compose.yml` in this repo.
 
 On first start:
