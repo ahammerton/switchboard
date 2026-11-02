@@ -6,6 +6,12 @@ and versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-11-02
+
+### Fixed
+
+- **Drop-down lists are readable in dark mode.** Options such as the widget list used a see-through background that some browsers drew on white, so the text was hard to read. They now use the theme's own colours in light and dark mode, including Glass.
+
 ## [0.2.0] - 2026-10-29
 
 ### Added
@@ -70,6 +76,7 @@ The first public release.
 - **Changes are only accepted from the dashboard's own page.** The browser's `Origin` and `Sec-Fetch-Site` headers are checked, and request bodies must be JSON. This blocks cross-site request forgery.
 - **Requests for unknown public host names are refused**, which blocks DNS rebinding. Add the names you use, such as reverse-proxy domains, to `ALLOWED_HOSTS`.
 
-[Unreleased]: https://github.com/ahammerton/switchboard/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/ahammerton/switchboard/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/ahammerton/switchboard/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/ahammerton/switchboard/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/ahammerton/switchboard/releases/tag/v0.1.0
