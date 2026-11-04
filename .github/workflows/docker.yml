@@ -36,7 +36,7 @@ jobs:
       - name: Tests
         run: python -m unittest discover -s tests -t . -v
       - name: Front-end syntax
-        run: node --check public/app.js
+        run: node --check public/app.js && node --check public/sw.js
 
   image:
     needs: test

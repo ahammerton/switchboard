@@ -61,6 +61,13 @@ class FirstStartTests(ServerTest):
         self.assertEqual(self.req("GET", "/app.js")[2].get("Cache-Control"), "no-cache")
         self.assertEqual(self.req("GET", "/api/config")[2].get("Cache-Control"), "no-store")
 
+    def test_app_files_are_served_with_their_types(self):
+        for path, kind in (("/manifest.webmanifest", "application/manifest+json"), ("/sw.js", "javascript"),
+                           ("/icon.svg", "image/svg+xml"), ("/icons/icon-512.png", "image/png")):
+            status, _, headers = self.req("GET", path)
+            self.assertEqual(status, 200, path)
+            self.assertIn(kind, headers.get("Content-Type"), path)
+
     def test_static_files_cannot_escape_public(self):
         self.assertEqual(self.req("GET", "/../server.py")[0], 404)
         self.assertEqual(self.req("GET", "/api/nope")[0], 404)

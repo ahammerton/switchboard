@@ -25,6 +25,7 @@ Switchboard is a small, self-hosted start page for your home lab. It has no depe
 - Settings for title, theme (auto/light/dark), accent colour, tile size, background image and search engine
 - **Custom backgrounds**: upload an image from your computer or phone, pick one you uploaded earlier, or paste an image URL
 - Search bar that filters services across all tabs as you type, or searches the web on Enter
+- **Install as an app** on your phone or computer: its own icon, full screen, and a friendly screen when the server can't be reached
 - Raw JSON editor, plus import and export of the config
 - **Protected editing**: an edit token is generated on first start, so guests on your network can't change the page, and other websites can't make the server act for them
 - Status checks run on the server: no CORS problems, and self-signed certificates are fine
@@ -77,6 +78,16 @@ To report a vulnerability privately, see [SECURITY.md](SECURITY.md).
 - **DNS rebinding is blocked.** The server only answers under host names it knows (see `ALLOWED_HOSTS`). This stops a malicious site from pointing its own domain at your server to read your config. If you open the dashboard through a public domain, for example a reverse-proxy name like `dash.example.com`, add it to `ALLOWED_HOSTS`, or you'll get an error page naming the setting.
 - **Secrets.** API keys and the alert webhook are kept in `config/secrets.json` and the token in `config/edit-token`, both readable only by the server (`600`). They're never sent to the browser, and they're not encrypted, so protect the `config` folder like any other password store.
 - **Certificates.** Status checks and widgets don't verify TLS certificates, because most lab services use self-signed ones. RSS feeds and weather are fetched normally.
+
+### Install as an app
+
+Switchboard can be installed like an app, with its own icon and no browser bars:
+
+- **iPhone / iPad:** open it in Safari, tap Share, then **Add to Home Screen**.
+- **Android:** open it in Chrome, tap ⋮, then **Install app** (or **Add to Home screen**).
+- **Desktop Chrome or Edge:** click the install icon at the end of the address bar.
+
+Browsers only treat it as a full app over **HTTPS** (or on `localhost`), for example through a reverse proxy. Over plain `http://` you get an ordinary shortcut. The installed app still needs your network or VPN to reach the server. If it can't, it shows a short "Can't reach Switchboard" screen with a retry button.
 
 ### Interface style
 

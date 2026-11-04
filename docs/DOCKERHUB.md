@@ -16,6 +16,7 @@ dependencies: one Python server and a vanilla HTML/JS front end.
 - **Upcoming tab** combining Sonarr, Radarr, Lidarr, Readarr and Magarr, a **News tab** (RSS), weather, and a **system stats bar** for the host.
 - **Find services** scans your machines for apps that aren't on the dashboard yet.
 - **In-browser editing**, protected by an edit token, and two styles: Normal and Glass.
+- **Install as an app** on your phone (over HTTPS), with its own icon and full-screen view.
 
 ## Quick start
 

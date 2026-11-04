@@ -54,7 +54,7 @@ BG_DIR = os.path.join(CONFIG_DIR, "backgrounds")
 SECRETS_FILE = os.path.join(CONFIG_DIR, "secrets.json")
 HISTORY_FILE = os.path.join(CONFIG_DIR, "history.json")
 ALERTS_SECRET_ID = "_alerts"  # secrets.json entry holding the alert webhook URL
-VERSION = "0.2.2"
+VERSION = "0.3.0"
 EDIT_TOKEN = os.environ.get("EDIT_TOKEN", "")  # resolved properly in main()
 EDIT_TOKEN_FILE = os.path.join(CONFIG_DIR, "edit-token")
 TOKEN_OFF = ("off", "none", "false", "no", "0")
@@ -636,6 +636,9 @@ def host_allowed(host_header):
 
 
 class Handler(SimpleHTTPRequestHandler):
+    extensions_map = {**SimpleHTTPRequestHandler.extensions_map,
+                      ".webmanifest": "application/manifest+json"}  # not known to Python 3.9
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=PUBLIC_DIR, **kwargs)
 

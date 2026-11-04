@@ -1,7 +1,9 @@
 """Static checks of the front end (no browser needed)."""
+import json
 import os
 import re
 import shutil
+import struct
 import subprocess
 import unittest
 
@@ -17,9 +19,29 @@ def read(name):
 
 class FrontendTests(unittest.TestCase):
     @unittest.skipUnless(shutil.which("node"), "Node.js isn't installed")
-    def test_app_js_syntax(self):
-        r = subprocess.run(["node", "--check", os.path.join(PUBLIC, "app.js")], capture_output=True, text=True)
-        self.assertEqual(r.returncode, 0, r.stderr)
+    def test_js_syntax(self):
+        for name in ("app.js", "sw.js"):
+            r = subprocess.run(["node", "--check", os.path.join(PUBLIC, name)], capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0, name + ": " + r.stderr)
+
+    def test_manifest_icons_exist_at_their_sizes(self):
+        manifest = json.loads(read("manifest.webmanifest"))
+        self.assertEqual(manifest["display"], "standalone")
+        purposes = set()
+        for icon in manifest["icons"]:
+            path = os.path.join(PUBLIC, icon["src"])
+            self.assertTrue(os.path.exists(path), icon["src"])
+            purposes.add(icon["purpose"])
+            if icon["type"] == "image/png":
+                with open(path, "rb") as f:
+                    head = f.read(24)
+                self.assertEqual(head[:8], b"\x89PNG\r\n\x1a\n", icon["src"])
+                self.assertEqual("%dx%d" % struct.unpack(">II", head[16:24]), icon["sizes"], icon["src"])
+        self.assertEqual(purposes, {"any", "maskable"})
+
+    def test_offline_page_is_what_the_service_worker_caches(self):
+        self.assertIn('"offline.html"', read("sw.js"))
+        self.assertTrue(os.path.exists(os.path.join(PUBLIC, "offline.html")))
 
     def test_every_element_app_js_looks_up_exists(self):
         html_ids = set(re.findall(r'id="([^"]+)"', read("index.html")))

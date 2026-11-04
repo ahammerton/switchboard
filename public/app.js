@@ -161,6 +161,8 @@ function setBackground(url) {
   bg.classList.toggle("has-image", !!url);
 }
 
+const THEME_BAR = { light: "#f4f5f8", dark: "#0b0d12" }; // matches --bg
+
 function applyTheme(style = uiStyle()) {
   const theme = cfg.theme || {};
   const root = document.documentElement;
@@ -171,6 +173,10 @@ function applyTheme(style = uiStyle()) {
   root.style.setProperty("--accent", theme.accent || "#6366f1");
   if (theme.mode === "light" || theme.mode === "dark") root.dataset.theme = theme.mode;
   else delete root.dataset.theme;
+  // Phone status bar / app title bar: follow a forced theme, or the device's own setting.
+  document.querySelectorAll('meta[name="theme-color"]').forEach((m) => {
+    m.content = THEME_BAR[theme.mode] || THEME_BAR[m.dataset.scheme];
+  });
   root.dataset.tile = theme.tileSize || "medium";
   setBackground(theme.background);
 }
@@ -184,6 +190,7 @@ function render() {
   history.replaceState(null, "", tabs.length > 1 ? "#" + slug(tab.name) : location.pathname);
 
   $("#title").textContent = cfg.title || "";
+  document.querySelector('meta[name="apple-mobile-web-app-title"]').content = cfg.title || "Switchboard";
   $("#subtitle").textContent = cfg.subtitle || "";
   $("#clock").classList.toggle("hidden", cfg.showClock === false);
   $("#greeting").classList.toggle("hidden", cfg.showGreeting === false);
@@ -1627,3 +1634,9 @@ async function init() {
 init().catch((e) => {
   document.body.append(el("p", { class: "wrap empty" }, "Could not load config: " + e.message));
 });
+
+// Installable as an app: the service worker only adds an offline screen. Browsers
+// allow it over HTTPS (or on localhost), so plain-HTTP addresses just skip it.
+if ("serviceWorker" in navigator && window.isSecureContext) {
+  navigator.serviceWorker.register("sw.js").catch(() => {});
+}
