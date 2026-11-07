@@ -119,6 +119,38 @@ h1 { margin: 2px 0 0; font-size: clamp(28px, 5vw, 40px); letter-spacing: -0.02em
 .sys-meter > span.warn { background: var(--down); }
 .sysbar > .btn { margin-left: auto; }
 
+/* Home services: cards above the tabs (bin collection) */
+.home-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 14px; margin-top: 14px; }
+.home-card {
+  display: flex; flex-direction: column; gap: 10px;
+  padding: 14px 16px;
+  border-radius: var(--radius); border: 1px solid var(--border);
+  background: var(--surface); box-shadow: var(--shadow);
+  -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+  font-size: 13px;
+}
+.home-card.warn { border-color: color-mix(in srgb, var(--down) 60%, var(--border)); }
+/* In a group: about two tiles tall, with the tiles flowing beside it */
+.grid > .home-card { grid-row: span 2; padding: 12px 14px; gap: 6px; }
+.grid > .home-card .bins-next { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.grid > .home-card .bins-when { font-size: 18px; }
+.grid > .home-card .bin-chip { padding: 2px 8px; }
+.grid > .home-card .bins-later { padding-top: 6px; gap: 2px; }
+.grid > .home-card .bins-later li:nth-child(n+3) { display: none; }
+.home-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.home-card-title { font-weight: 600; color: var(--muted); }
+.home-card-note { margin: 0; color: var(--muted); }
+.home-card-note.error { color: var(--down); }
+.home-card > .btn { align-self: flex-start; }
+.bins-next { display: flex; flex-direction: column; gap: 8px; }
+.bins-when { font-size: 22px; font-weight: 700; line-height: 1.1; }
+.home-card.warn .bins-when { color: var(--down); }
+.bins-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.bin-chip { padding: 3px 10px; border-radius: 999px; background: color-mix(in srgb, var(--muted) 16%, transparent); font-weight: 500; white-space: nowrap; }
+.bins-later { list-style: none; margin: 0; padding: 8px 0 0; border-top: 1px solid var(--border); display: grid; gap: 4px; }
+.bins-later li { display: flex; gap: 10px; }
+.bins-later-when { min-width: 92px; color: var(--muted); }
+
 /* Tabs */
 .tabs { display: flex; gap: 4px; margin-top: 24px; padding: 4px; border-radius: 12px; background: var(--surface); border: 1px solid var(--border); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); overflow-x: auto; scrollbar-width: none; width: fit-content; max-width: 100%; }
 .tab {
@@ -459,7 +491,7 @@ select option, select optgroup { background: var(--menu); color: var(--text); }
 [data-ui="glass"] .bg.has-image::after { opacity: 0.18; }
 
 /* Shared glass material */
-[data-ui="glass"] :is(.tile, .feed-card, .tabs, .hero-side, .sysbar, .up-list, .search input, .icon-btn, .btn, dialog) {
+[data-ui="glass"] :is(.tile, .feed-card, .tabs, .hero-side, .sysbar, .home-card, .up-list, .search input, .icon-btn, .btn, dialog) {
   background: var(--surface);
   border-color: var(--border);
   -webkit-backdrop-filter: var(--glass-blur);
@@ -468,8 +500,8 @@ select option, select optgroup { background: var(--menu); color: var(--text); }
 }
 
 /* Specular rim: a light edge that is brightest at the top-left and bottom-right */
-[data-ui="glass"] :is(.tile, .feed-card, .tabs, .hero-side, .sysbar, .up-list, dialog) { position: relative; }
-[data-ui="glass"] :is(.tile, .feed-card, .tabs, .hero-side, .sysbar, .up-list, dialog)::before {
+[data-ui="glass"] :is(.tile, .feed-card, .tabs, .hero-side, .sysbar, .home-card, .up-list, dialog) { position: relative; }
+[data-ui="glass"] :is(.tile, .feed-card, .tabs, .hero-side, .sysbar, .home-card, .up-list, dialog)::before {
   content: "";
   position: absolute;
   inset: 0;

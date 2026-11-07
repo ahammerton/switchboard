@@ -54,7 +54,7 @@ BG_DIR = os.path.join(CONFIG_DIR, "backgrounds")
 SECRETS_FILE = os.path.join(CONFIG_DIR, "secrets.json")
 HISTORY_FILE = os.path.join(CONFIG_DIR, "history.json")
 ALERTS_SECRET_ID = "_alerts"  # secrets.json entry holding the alert webhook URL
-VERSION = "0.3.0"
+VERSION = "0.3.1"
 EDIT_TOKEN = os.environ.get("EDIT_TOKEN", "")  # resolved properly in main()
 EDIT_TOKEN_FILE = os.path.join(CONFIG_DIR, "edit-token")
 TOKEN_OFF = ("off", "none", "false", "no", "0")
@@ -167,6 +167,9 @@ def validate_config(cfg):
         for g in t.get("groups", []):
             if not isinstance(g, dict) or not isinstance(g.get("services", []), list):
                 return "each group must be an object with a services array"
+    home = cfg.get("homeServices", {})
+    if not isinstance(home, dict) or not isinstance(home.get("bins", {}), dict):
+        return "config.homeServices.bins must be an object"
     rss = cfg.get("rss", {})
     if not isinstance(rss, dict) or not isinstance(rss.get("feeds", []), list):
         return "config.rss.feeds must be an array"
@@ -327,7 +330,7 @@ def _when(d):
 
 
 def get_upcoming(force=False):
-    """Combined calendar from the Sonarr/Radarr/Lidarr/Readarr services that have widgets."""
+    """Combined calendar from the *arr and Magarr services that have widgets, plus bin collections."""
     cfg = load_config()
     uc = cfg.get("upcoming") or {}
     if not uc.get("enabled"):
@@ -341,30 +344,92 @@ def get_upcoming(force=False):
                if s["widget"]["type"] in widgets.CALENDARS
                and kinds.get(widgets.CALENDARS[s["widget"]["type"]][0], True) is not False]
     secrets = load_secrets()
+    jobs = [(s.get("name"), lambda s=s: widgets.calendar(s["widget"], s.get("url"), secrets.get(s["id"], {}), start, end))
+            for s in sources]
+    bins = bins_config(cfg)
+    if bins and bins.get("calendar", True) is not False and kinds.get("bin", True) is not False:
+        jobs.append((bins.get("title") or "Bin collection", lambda: widgets.bins_calendar(bins, start, end)))
     key = json.dumps([[s["id"], s["widget"], s.get("url"), secrets.get(s["id"])] for s in sources]
-                     + [start.isoformat(), end.isoformat()], sort_keys=True)
+                     + [bins, start.isoformat(), end.isoformat()], sort_keys=True)
     with _upcoming_lock:
         age = time.time() - _upcoming_cache["at"]
         max_age = UPCOMING_MIN_REFRESH_SECONDS if force else UPCOMING_CACHE_SECONDS
         if _upcoming_cache["key"] == key and age < max_age:
             return _upcoming_cache["data"]
         with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
-            results = list(pool.map(
-                lambda s: widgets.calendar(s["widget"], s.get("url"), secrets.get(s["id"], {}), start, end), sources))
+            results = list(pool.map(lambda job: job[1](), jobs))
         items, srcs = [], []
-        for svc, r in zip(sources, results):
+        for (name, _), r in zip(jobs, results):
             if "error" in r:
-                srcs.append({"name": svc.get("name"), "error": r["error"]})
+                srcs.append({"name": name, "error": r["error"]})
                 continue
             for it in r["items"]:
-                it["source"] = svc.get("name")
+                it["source"] = name
                 items.append(it)
-            srcs.append({"name": svc.get("name"), "count": len(r["items"])})
+            srcs.append({"name": name, "count": len(r["items"])})
         items.sort(key=lambda it: _when(it.get("date")))
         data = {"enabled": True, "today": today.date().isoformat(), "start": start.isoformat(),
                 "end": end.isoformat(), "items": items, "sources": srcs}
         _upcoming_cache.update(at=time.time(), key=key, data=data)
         return data
+
+
+# ---------------------------------------------------------------- home services
+#
+# Cards shown above the tabs for things that aren't a service you open, such as
+# bin collection days. Each is configured under config.homeServices.
+
+def bins_config(cfg):
+    """The bin collection card's settings, or None when it is switched off."""
+    bins = (cfg.get("homeServices") or {}).get("bins")
+    return bins if isinstance(bins, dict) and bins.get("enabled") else None
+
+
+# UKBinCollectionData's council list, for the council drop-down. Fetched from GitHub
+# at most once a day; a copy in the config folder covers restarts without internet.
+UKBINS_COUNCILS_URL = os.environ.get(
+    "UKBINS_COUNCILS_URL",
+    "https://raw.githubusercontent.com/robbrad/UKBinCollectionData/master/uk_bin_collection/tests/input.json")
+COUNCILS_CACHE_SECONDS = 24 * 3600
+COUNCILS_MAX_BYTES = 5 * 1024 * 1024
+_councils = {"at": 0, "data": None}
+_councils_lock = threading.Lock()
+
+
+def get_bin_councils():
+    councils_file = os.path.join(CONFIG_DIR, "ukbins-councils.json")
+    with _councils_lock:
+        if _councils["data"] and time.time() - _councils["at"] < COUNCILS_CACHE_SECONDS:
+            return _councils["data"]
+        try:
+            req = urllib.request.Request(UKBINS_COUNCILS_URL, headers={"User-Agent": "switchboard"})
+            with urllib.request.urlopen(req, timeout=15) as res:
+                body = res.read(COUNCILS_MAX_BYTES + 1)
+            if len(body) > COUNCILS_MAX_BYTES:
+                raise ValueError("the council list is too large")
+            data = {"councils": widgets.parse_councils(json.loads(body))}
+            fd, tmp = tempfile.mkstemp(dir=CONFIG_DIR, suffix=".tmp")
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False)
+            os.replace(tmp, councils_file)
+        except Exception as e:
+            reason = getattr(e, "reason", None) or e
+            if _councils["data"]:
+                _councils["at"] = time.time() - COUNCILS_CACHE_SECONDS + 3600  # try again in an hour
+                return _councils["data"]
+            try:
+                with open(councils_file, encoding="utf-8") as f:
+                    data = {**json.load(f), "stale": True}
+            except (OSError, ValueError):
+                return {"error": f"couldn't download the council list ({reason})"}
+        fresh = not data.get("stale")
+        _councils.update(at=time.time() - (0 if fresh else COUNCILS_CACHE_SECONDS - 3600), data=data)
+        return data
+
+
+def get_home():
+    bins = bins_config(load_config())
+    return {"bins": widgets.bins_card(bins)} if bins else {}
 
 
 def check_url(url):
@@ -738,6 +803,10 @@ class Handler(SimpleHTTPRequestHandler):
             return self.send_json(MONITOR.history.summary())
         if path == "/api/alerts/status":
             return self.send_json({**MONITOR.status, "webhookSet": bool(alert_webhook())})
+        if path == "/api/bins/councils":
+            return self.send_json(get_bin_councils())
+        if path == "/api/home":
+            return self.send_json(get_home())
         if path == "/api/upcoming":
             return self.send_json(get_upcoming(force="refresh=1" in self.path.partition("?")[2]))
         if path == "/api/widgets":
@@ -915,6 +984,7 @@ class Handler(SimpleHTTPRequestHandler):
             return self.send_json({"error": err}, 400)
         save_config(cfg)
         prune_secrets(cfg)
+        widgets.retry_failed_bin_lookups()
         _status_cache["at"] = 0  # re-check with the new service list
         _weather_cache["at"] = 0
         return self.send_json({"ok": True})
@@ -927,7 +997,8 @@ def main():
     if not EDIT_TOKEN:
         print("EDIT_TOKEN=off: anyone who can open the dashboard can change it", flush=True)
     MONITOR = monitor.Monitor(HISTORY_FILE, load_config=load_config, collect_status=collect_status,
-                              collect_widgets=collect_widgets, get_system=get_system, alert_webhook=alert_webhook)
+                              collect_widgets=collect_widgets, get_system=get_system, get_home=get_home,
+                              alert_webhook=alert_webhook)
     MONITOR.start()
     server = ThreadingHTTPServer((HOST, PORT), Handler)
     print(f"Switchboard {VERSION} on http://{HOST}:{PORT}  (config: {CONFIG_FILE})", flush=True)

@@ -83,7 +83,9 @@ class MonitorTests(unittest.TestCase):
         self.m = monitor.Monitor(
             os.path.join(self.dir, "history.json"), load_config=lambda: self.cfg,
             collect_status=lambda force: self.status, collect_widgets=lambda: self.widgets,
-            get_system=lambda: self.system, alert_webhook=lambda: self.hook.app.url + "/discord")
+            get_system=lambda: self.system, get_home=lambda: self.home,
+            alert_webhook=lambda: self.hook.app.url + "/discord")
+        self.home = {}
 
     def tearDown(self):
         self.hook.app.close()
@@ -125,6 +127,25 @@ class MonitorTests(unittest.TestCase):
         self.system["temp"]["c"] = 50
         self.system["disks"][0].update(used=50e9, free=50e9)
         self.assertEqual(len(self.tick()), 3)
+
+    def test_one_bin_reminder_per_collection_day(self):
+        self.cfg["homeServices"] = {"bins": {"enabled": True}}
+        day = {"date": "2026-11-09", "when": "Tomorrow", "warn": True,
+               "bins": [{"icon": "⚫", "type": "Black"}, {"icon": "🍎", "type": "Food"}]}
+        self.home = {"bins": {"collections": [day]}}
+        self.tick()
+        self.assertEqual(self.tick(), ["🟠 Bin collection: ⚫ Black, 🍎 Food tomorrow"])
+        day["when"] = "Today"
+        self.assertEqual(self.tick(), [])  # still the same collection: no second reminder
+        self.home = {"bins": {"collections": [{**day, "date": "2026-11-16", "when": "Mon", "warn": False}]}}
+        self.assertEqual(self.tick(), [])  # and no "back to normal" message
+        self.home = {"bins": {"collections": [{**day, "date": "2026-11-16", "when": "Tomorrow"}]}}
+        self.tick()
+        self.assertEqual(len(self.tick()), 1)
+        self.cfg["alerts"]["bins"] = False
+        self.home = {"bins": {"collections": [{**day, "date": "2026-11-23"}]}}
+        self.tick()
+        self.assertEqual(self.tick(), [])
 
     def test_switching_alerts_off_sends_nothing(self):
         self.cfg["alerts"]["enabled"] = False

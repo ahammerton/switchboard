@@ -250,6 +250,78 @@ class WidgetAndSecretTests(unittest.TestCase):
         self.assertEqual({i["source"] for i in d["items"]}, {"Sonarr", "Radarr"})
 
 
+class HomeServicesTests(unittest.TestCase):
+    """The bin collection card through the server, with a mock UKBinCollectionData."""
+
+    def setUp(self):
+        self.bins = MockApp(apps.ukbins())
+        cfg = default_config()
+        cfg["upcoming"] = {"enabled": True, "days": 7, "pastDays": 1}
+        cfg["homeServices"] = {"bins": {"enabled": True, "url": self.bins.url, "council": "LeedsCityCouncil",
+                                        "councilUrl": "https://council.example/bins", "title": "Bins"}}
+        self.cfg = cfg
+        self.sb = Switchboard(config=cfg, env={"EDIT_TOKEN": "tok"})
+
+    def tearDown(self):
+        self.sb.stop()
+        self.bins.close()
+
+    def test_home_endpoint_returns_the_card(self):
+        days = self.sb.request("GET", "/api/home")[1]["bins"]["collections"]
+        self.assertEqual(days[0]["when"], "Tomorrow")
+        self.assertEqual([b["type"] for b in days[0]["bins"]], ["Blue Recycling", "Food Waste"])
+
+    def test_bins_on_the_upcoming_tab_unless_turned_off(self):
+        d = self.sb.request("GET", "/api/upcoming")[1]
+        self.assertEqual([(i["title"], i["source"]) for i in d["items"]],
+                         [("Blue Recycling", "Bins"), ("Food Waste", "Bins"), ("Garden", "Bins")])
+        self.cfg["homeServices"]["bins"]["calendar"] = False
+        self.assertEqual(self.sb.request("PUT", "/api/config", self.cfg, token="tok")[0], 200)
+        self.assertEqual(self.sb.request("GET", "/api/upcoming?refresh=1")[1]["items"], [])
+
+    def test_switched_off(self):
+        self.cfg["homeServices"]["bins"]["enabled"] = False
+        self.assertEqual(self.sb.request("PUT", "/api/config", self.cfg, token="tok")[0], 200)
+        self.assertEqual(self.sb.request("GET", "/api/home")[1], {})
+
+    def test_bad_home_services_config_is_refused(self):
+        self.cfg["homeServices"] = {"bins": []}
+        self.assertEqual(self.sb.request("PUT", "/api/config", self.cfg, token="tok")[0], 400)
+
+
+class CouncilListTests(unittest.TestCase):
+    def test_council_list_is_cached_and_kept_for_offline_restarts(self):
+        handler = apps.council_list()
+        github = MockApp(handler)
+        sb = Switchboard(env={"EDIT_TOKEN": "tok", "UKBINS_COUNCILS_URL": github.url + "/input.json"})
+        try:
+            r = sb.request("GET", "/api/bins/councils")[1]
+            self.assertEqual([c["id"] for c in r["councils"]], ["AdurAndWorthingCouncils", "GuildfordCouncil", "LeedsCityCouncil"])
+            sb.request("GET", "/api/bins/councils")
+            self.assertEqual(handler.calls, 1)
+            with open(os.path.join(sb.dir, "ukbins-councils.json")) as f:
+                saved = f.read()
+        finally:
+            sb.stop()
+            github.close()
+        offline = Switchboard(env={"EDIT_TOKEN": "tok", "UKBINS_COUNCILS_URL": github.url + "/input.json"})
+        try:
+            with open(os.path.join(offline.dir, "ukbins-councils.json"), "w") as f:
+                f.write(saved)  # GitHub is gone now: the saved copy is used
+            r = offline.request("GET", "/api/bins/councils")[1]
+            self.assertTrue(r["stale"])
+            self.assertEqual(len(r["councils"]), 3)
+        finally:
+            offline.stop()
+
+    def test_no_list_and_no_saved_copy(self):
+        sb = Switchboard(env={"EDIT_TOKEN": "tok", "UKBINS_COUNCILS_URL": "http://127.0.0.1:9/input.json"})
+        try:
+            self.assertIn("couldn't download the council list", sb.request("GET", "/api/bins/councils")[1]["error"])
+        finally:
+            sb.stop()
+
+
 class PruneSecretsTests(unittest.TestCase):
     def test_removing_a_widget_deletes_its_secrets_but_keeps_alert_settings(self):
         cfg = default_config()

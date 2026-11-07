@@ -120,10 +120,11 @@ function ensureToken() {
 }
 
 async function save() {
+  const binsMoved = rehomeBinsCard();
   try {
     ensureToken();
     await api("PUT", "/api/config", cfg);
-    toast("Saved");
+    toast(binsMoved ? "Saved. The bin collection card is now above the tabs, because its group was deleted." : "Saved");
     render();
     refreshStatus();
     refreshWidgets();
@@ -197,6 +198,7 @@ function render() {
   $("#search").classList.toggle("hidden", cfg.search?.enabled === false);
   $("#weather").classList.toggle("hidden", !cfg.weather?.enabled);
   renderSystem(lastSystem);
+  renderHomeCards();
   renderTabs();
 
   // While searching, show matches from every tab, not just the active one.
@@ -294,6 +296,7 @@ function renderGroup(group, ti, gi, showTabName) {
     moveService(dragSrc, ti, gi, group.services.length);
   });
 
+  if (binsOn() && group.id && group.id === binsGroupId()) grid.append(binsCard(lastHome?.bins));
   group.services.forEach((svc, si) => grid.append(renderTile(svc, ti, gi, si)));
   grid.append(el("button", { class: "tile add-tile edit-only", type: "button", onclick: () => editService(ti, gi) }, "+ Add service"));
 
@@ -557,6 +560,192 @@ function editSystemOptions() {
   });
 }
 
+// ---------- home services (cards above the tabs) ----------
+
+const HOME_REFRESH_MS = 5 * 60 * 1000;
+const HOME_RETRY_MS = 20 * 1000; // while a first bin lookup is still running
+let lastHome = null;
+let homeTimer = null;
+const binsOn = () => !!cfg.homeServices?.bins?.enabled;
+
+/** The id of the group the bin card sits in, or null for above the tabs (also when that group is gone). */
+function binsGroupId() {
+  const place = cfg.homeServices?.bins?.placement;
+  return place && place !== "top" && cfg.tabs.some((t) => t.groups.some((g) => g.id === place)) ? place : null;
+}
+
+/** If the bin card's group has gone (deleted, or removed in the JSON or by an import), its
+ *  placement goes back to above the tabs, so its settings say where it really is. True if it moved. */
+function rehomeBinsCard() {
+  const bins = cfg.homeServices?.bins;
+  if (!bins?.placement || bins.placement === "top" || binsGroupId()) return false;
+  bins.placement = "top";
+  return !!bins.enabled;
+}
+
+/** Added to a delete confirmation when the groups being deleted hold the bin card. */
+function binsCardWarning(groups) {
+  const id = binsOn() && binsGroupId();
+  return id && groups.some((g) => g.id === id) ? "\n\nThe bin collection card in it will move above the tabs." : "";
+}
+
+function renderHomeCards() {
+  const box = $("#homeCards");
+  const top = binsOn() && !binsGroupId();
+  box.classList.toggle("hidden", !top);
+  box.replaceChildren(...(top ? [binsCard(lastHome?.bins)] : []));
+  // In a group, the card is drawn by renderGroup; this keeps it up to date between full renders.
+  for (const card of document.querySelectorAll("#groups .home-card.bins")) card.replaceWith(binsCard(lastHome?.bins));
+}
+
+/** "Today", "Tomorrow", "Monday" this week, else "Mon 16 Nov". */
+function binDay(iso) {
+  const day = new Date(iso + "T00:00:00");
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const n = Math.round((day - today) / 86400000);
+  if (n === 0) return "Today";
+  if (n === 1) return "Tomorrow";
+  return day.toLocaleDateString(undefined, n > 1 && n < 7 ? { weekday: "long" } : { weekday: "short", day: "numeric", month: "short" });
+}
+
+function binsCard(d) {
+  const bc = cfg.homeServices.bins;
+  const card = el("section", { class: "home-card bins" },
+    el("div", { class: "home-card-head" },
+      el("span", { class: "home-card-title" }, "🗑️ ", bc.title || "Bin collection"),
+      el("button", { class: "btn small edit-only", type: "button", onclick: editBinsOptions }, "Edit")));
+  const note = (text, cls = "") => el("p", { class: "home-card-note " + cls }, text);
+
+  if (!bc.url || !bc.council || !bc.councilUrl) {
+    card.append(note("Not set up yet."), el("button", { class: "btn small", type: "button", onclick: editBinsOptions }, "Set up"));
+  } else if (!d) {
+    card.append(note("Loading…"));
+  } else if (d.error) {
+    card.append(note("⚠️ " + d.error, "error"));
+  } else if (!d.collections.length) {
+    card.append(note("No collections listed."));
+  } else {
+    const [next, ...later] = d.collections;
+    card.classList.toggle("warn", next.warn);
+    const long = new Date(next.date + "T00:00:00").toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" });
+    card.append(
+      el("div", { class: "bins-next" },
+        el("div", { class: "bins-when", title: long }, binDay(next.date)),
+        el("div", { class: "bins-list" }, next.bins.map((b) =>
+          el("span", { class: "bin-chip" }, el("span", { "aria-hidden": "true" }, b.icon), " " + b.type)))),
+      later.length ? el("ul", { class: "bins-later" }, later.map((c) => el("li", {},
+        el("span", { class: "bins-later-when" }, binDay(c.date)),
+        el("span", {}, c.bins.map((b) => `${b.icon} ${b.type}`).join(", "))))) : null);
+  }
+  return card;
+}
+
+async function refreshHome() {
+  clearTimeout(homeTimer);
+  if (!binsOn()) {
+    lastHome = null;
+    return renderHomeCards();
+  }
+  try {
+    lastHome = await api("GET", "/api/home");
+  } catch (e) {
+    lastHome = { bins: { error: e.message } };
+  }
+  renderHomeCards();
+  const fetching = lastHome.bins?.error?.startsWith("still fetching");
+  homeTimer = setTimeout(refreshHome, fetching ? HOME_RETRY_MS : HOME_REFRESH_MS);
+}
+
+const BIN_NEEDS = { postcode: "postcode", number: "house number or name", uprn: "UPRN", usrn: "USRN" };
+
+/** Markdown links in the council list's notes → plain "text (url)". */
+const plainNote = (s) => s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, "$1 ($2)");
+
+/** Fills the council drop-down from UKBinCollectionData's list. Choosing a council fills in
+ *  its URL, Skip get URL and (if it needs one) the Selenium address, and says which address
+ *  fields it uses. Without the list, the council is typed in instead. */
+function councilPicker(select) {
+  const info = el("span", { class: "hint council-info" });
+  const field = (k) => $(`#modalBody [data-key="${k}"]`);
+  api("GET", "/api/bins/councils").then((r) => {
+    if (r.error) throw new Error(r.error);
+    const byId = new Map(r.councils.map((c) => [c.id, c]));
+    const current = select.value;
+    select.replaceChildren(el("option", { value: "" }, "Choose your council…"),
+      ...r.councils.map((c) => el("option", { value: c.id, selected: c.id === current }, c.name)));
+    if (current && !byId.has(current)) select.prepend(el("option", { value: current, selected: true }, `${current} (not in the list)`));
+    select.required = true;
+    const describe = () => {
+      const c = byId.get(select.value);
+      if (!c) return (info.textContent = r.stale ? "Using a saved copy of the council list: GitHub couldn't be reached." : "");
+      const needs = c.needs.map((k) => BIN_NEEDS[k]);
+      info.textContent = [
+        needs.length ? `Fill in: ${needs.join(", ")}.` : "",
+        c.selenium ? "Needs Selenium." : "",
+        c.placeholder && !/XXX/.test(c.note) ? "Replace the XXXX in the council URL with your property's ID." : "",
+        plainNote(c.note),
+      ].filter(Boolean).join(" ");
+    };
+    select.addEventListener("change", () => {
+      const c = byId.get(select.value);
+      if (c) {
+        field("councilUrl").value = c.url;
+        field("skipGetUrl").checked = c.skipGetUrl;
+        if (c.selenium && !field("webDriver").value) field("webDriver").value = "http://selenium:4444";
+      }
+      describe();
+    });
+    describe();
+  }).catch((e) => {
+    const text = el("input", { id: select.id, type: "text", required: true, placeholder: "LeedsCityCouncil" });
+    text.value = select.value;
+    text.dataset.key = select.dataset.key;
+    select.replaceWith(text);
+    info.textContent = `${e.message}. Type your council's name as UKBinCollectionData's wiki writes it, and fill in the rest from the wiki.`;
+  });
+  return info;
+}
+
+function editBinsOptions() {
+  const bc = cfg.homeServices?.bins || {};
+  for (const t of cfg.tabs) for (const g of t.groups) g.id ??= newId(); // so the card can stay with a group
+  openForm("Bin collection", [
+    { key: "enabled", label: "Show the bin collection card", type: "checkbox", default: true },
+    { key: "placement", label: "Show it", type: "select", default: "top",
+      options: [["top", "Above the tabs (on every tab)"],
+        ...cfg.tabs.flatMap((t) => t.groups.map((g) => [g.id, `In “${g.name || "Untitled"}”`, `${t.name} tab`]))],
+      hint: "In a group, it sits before the group's services. If that group is deleted, it moves back above the tabs." },
+    { key: "title", label: "Card title", placeholder: "Bin collection" },
+    { key: "url", label: "Bin service address", required: true, placeholder: "http://192.168.1.10:8080",
+      hint: "Where UKBinCollectionData's API server runs (Docker image robbrad182/uk-bin-collection, port 8080)." },
+    { key: "council", label: "Council", type: "select", options: [[bc.council || "", bc.council || "Loading the council list…"]],
+      extra: councilPicker },
+    { key: "councilUrl", label: "Council URL", required: true, placeholder: "Filled in when you choose your council",
+      hint: "Filled in from the council list. Only change it if the note above says so." },
+    { key: "postcode", label: "Postcode", placeholder: "LS1 2JG" },
+    { key: "number", label: "House number or name" },
+    { key: "uprn", label: "UPRN", hint: "Some councils need your property's UPRN: find it at findmyaddress.co.uk." },
+    { key: "usrn", label: "USRN", hint: "Only if your council needs one." },
+    { key: "webDriver", label: "Selenium address", placeholder: "http://selenium:4444",
+      hint: "Only for councils that need Selenium (filled in when you choose one). The bin service connects to it, so use the Selenium container's name, not localhost." },
+    { key: "skipGetUrl", label: "Skip get URL (set from the council list)", type: "checkbox", default: false },
+    { key: "highlight", label: "Show in red", type: "select", default: "dayBefore",
+      options: [["dayBefore", "The day before and on the day"], ["onTheDay", "On the day only"], ["never", "Never"]],
+      hint: "When alerts are on, a red card also sends a reminder." },
+    { key: "calendar", label: "Also show collections on the Upcoming tab", type: "checkbox", default: true },
+  ], { enabled: true, ...bc }, {
+    onSave: (v) => {
+      for (const k of ["title", "postcode", "number", "uprn", "usrn", "webDriver"]) if (!v[k]) delete v[k];
+      cfg.homeServices = { ...cfg.homeServices, bins: v };
+      save(); // re-renders, so the card moves to its new place
+      lastHome = null;
+      refreshHome();
+      if (upcomingOn()) loadUpcoming("refresh");
+    },
+  });
+}
+
 // ---------- weather ----------
 
 // WMO weather codes → [label, day icon, night icon]
@@ -796,9 +985,9 @@ function applyHistory(h) {
 // ---------- upcoming (calendar) ----------
 
 const UPCOMING_REFRESH_MS = 10 * 60 * 1000;
-const KIND_ICONS = { episode: "📺", movie: "🎬", album: "🎵", book: "📚", magazine: "📖" };
+const KIND_ICONS = { episode: "📺", movie: "🎬", album: "🎵", book: "📚", magazine: "📖", bin: "🗑️" };
 const KIND_LABELS = [["episode", "TV episodes (Sonarr)"], ["movie", "Movies (Radarr)"], ["album", "Music (Lidarr)"],
-  ["book", "Books (Readarr)"], ["magazine", "Magazines (Magarr)"]];
+  ["book", "Books (Readarr)"], ["magazine", "Magazines (Magarr)"], ["bin", "Bin collections (UK)"]];
 let upcomingData = null;
 let upcomingFetchedAt = 0;
 let upcomingLoading = false;
@@ -848,7 +1037,7 @@ function renderUpcoming(root) {
     root.append(el("p", { class: "feed-note error" }, `⚠️ ${src.name}: ${src.error}`));
   }
   if (!d.sources.length) {
-    root.append(el("p", { class: "empty" }, "Add a Sonarr, Radarr, Lidarr, Readarr or Magarr widget to a service and its calendar will appear here."));
+    root.append(el("p", { class: "empty" }, "Add a Sonarr, Radarr, Lidarr, Readarr or Magarr widget to a service, or turn on the bin collection card, and its calendar will appear here."));
     return;
   }
   if (!d.items.length) {
@@ -870,10 +1059,10 @@ function renderUpcoming(root) {
       el("h2", {}, dayLabel(k, todayKey), el("span", { class: "group-tab" }, ` · ${items.length}`)),
       el("div", { class: "up-list" }, items.map((it) => {
         const released = past || (k === todayKey && !it.allDay && Date.parse(it.date) < Date.now());
-        const badge = it.hasFile ? el("span", { class: "up-badge ok" }, "Downloaded")
+        const badge = it.noStatus ? null : it.hasFile ? el("span", { class: "up-badge ok" }, "Downloaded")
           : released ? el("span", { class: "up-badge missing" }, "Missing") : null;
         return el("a", { class: "up-item", href: safeUrl(it.link), target: "_blank", rel: "noopener noreferrer" },
-          el("span", { class: "up-icon", "aria-hidden": "true" }, KIND_ICONS[it.kind] || "•"),
+          el("span", { class: "up-icon", "aria-hidden": "true" }, it.icon || KIND_ICONS[it.kind] || "•"),
           el("span", { class: "up-time" }, it.allDay ? "" : new Date(it.date).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })),
           el("span", { class: "up-main" },
             el("span", { class: "up-title" }, it.title),
@@ -1026,6 +1215,7 @@ async function editAlerts() {
     { key: "services", label: "When a service goes down, and when it's back", type: "checkbox", default: true },
     { key: "widgets", label: "When an app widget shows a warning (the values in red)", type: "checkbox", default: true },
     { key: "system", label: "When this server's CPU temperature, RAM or disk passes the system stats thresholds", type: "checkbox", default: true },
+    { key: "bins", label: "When bins are due out (the bin collection card turns red)", type: "checkbox", default: true },
     { key: "failures", label: "Alert after this many checks in a row", type: "number", default: 2,
       hint: `Checks run every ${cfg.statusInterval || 30} seconds (Settings → Status check interval).` },
   ], { ...ac }, {
@@ -1333,7 +1523,7 @@ function editGroup(ti = specialAt(activeTab) ? 0 : activeTab, gi) {
       save();
     },
     onDelete: isNew ? null : () => { groups.splice(gi, 1); save(); },
-    deleteMessage: "Delete this group and all of its services?",
+    deleteMessage: "Delete this group and all of its services?" + (isNew ? "" : binsCardWarning([groups[gi]])),
   });
 }
 
@@ -1388,7 +1578,7 @@ function editTab(ti) {
       activeTab = Math.max(0, ti - 1);
       save();
     },
-    deleteMessage: "Delete this tab and everything on it?",
+    deleteMessage: "Delete this tab and everything on it?" + (isNew ? "" : binsCardWarning(cfg.tabs[ti].groups)),
   });
 }
 
@@ -1494,7 +1684,8 @@ function editSettings() {
     { key: "weather.enabled", label: "Show weather", type: "checkbox", default: false },
     { key: "system.enabled", label: "Show system stats (CPU, temperature, RAM, disk) for this server", type: "checkbox", default: false },
     { key: "rss.enabled", label: "Show News (RSS) tab", type: "checkbox", default: false },
-    { key: "upcoming.enabled", label: "Show Upcoming tab (calendar from your Sonarr / Radarr / Lidarr / Readarr / Magarr widgets)", type: "checkbox", default: false },
+    { key: "upcoming.enabled", label: "Show Upcoming tab (calendar from your Sonarr / Radarr / Lidarr / Readarr / Magarr widgets and bin collections)", type: "checkbox", default: false },
+    { key: "homeServices.bins.enabled", label: "Show bin collection card (UK councils)", type: "checkbox", default: false },
     { key: "showUptime", label: "Show 24-hour uptime bars on tiles", type: "checkbox" },
     { key: "search.enabled", label: "Show search bar", type: "checkbox" },
     { key: "showClock", label: "Show clock", type: "checkbox" },
@@ -1519,12 +1710,16 @@ function editSettings() {
         rss: { ...cfg.rss, ...v.rss },
         upcoming: { ...cfg.upcoming, ...v.upcoming },
         system: { ...cfg.system, ...v.system },
+        homeServices: { ...cfg.homeServices, bins: { ...cfg.homeServices?.bins, ...v.homeServices.bins } },
       };
+      const binsNeedSetup = binsOn() && !cfg.homeServices.bins.council;
       try { localStorage.removeItem("uiStyle"); } catch { /* storage unavailable */ } // show the new default here too
       save();
       startStatusPolling();
       startSystemPolling();
       refreshHistory(); // uptime bars appear (or go) straight away
+      refreshHome();
+      if (binsNeedSetup) setTimeout(editBinsOptions, 0); // after this dialog closes
     },
   });
 }
@@ -1590,6 +1785,7 @@ async function init() {
   setInterval(refreshWidgets, 30 * 1000);
   refreshWeather();
   setInterval(refreshWeather, WEATHER_REFRESH_MS);
+  refreshHome();
   if (isRssTab(activeTab)) loadRss();
   if (isUpcomingTab(activeTab)) loadUpcoming();
   setInterval(() => {

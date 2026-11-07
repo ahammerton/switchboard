@@ -12,8 +12,9 @@ dependencies: one Python server and a vanilla HTML/JS front end.
 
 - **Tabs and groups** of service tiles, with icons and **live online/offline status**. Status checks run on the server, so CORS and self-signed certificates aren't a problem.
 - **App widgets** for 29 apps: the \*arr suite, Seerr, Plex, Jellyfin, Emby, Tautulli, Komga, Proxmox, Portainer, Dockge, UniFi, Pi-hole, AdGuard Home, Technitium, Gitea, Home Assistant, Immich, qBittorrent, SABnzbd and more, plus any JSON API.
+- **Bin collection card** with your next bin day and which bins go out, for 350+ UK councils via [UKBinCollectionData](https://github.com/robbrad/UKBinCollectionData).
 - **Alerts** to Discord or any JSON webhook, and **24-hour uptime bars** on each tile.
-- **Upcoming tab** combining Sonarr, Radarr, Lidarr, Readarr and Magarr, a **News tab** (RSS), weather, and a **system stats bar** for the host.
+- **Upcoming tab** combining Sonarr, Radarr, Lidarr, Readarr, Magarr and bin collections, a **News tab** (RSS), weather, and a **system stats bar** for the host.
 - **Find services** scans your machines for apps that aren't on the dashboard yet.
 - **In-browser editing**, protected by an edit token, and two styles: Normal and Glass.
 - **Install as an app** on your phone (over HTTPS), with its own icon and full-screen view.

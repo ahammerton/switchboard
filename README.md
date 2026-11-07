@@ -15,8 +15,9 @@ Switchboard is a small, self-hosted start page for your home lab. It has no depe
 - **App widgets**: live stats from your apps' APIs shown on their tiles. Built in for the *arr suite, Seerr, Plex, Jellyfin, Emby, Tautulli, Komga, BookOrbit, Magarr, Proxmox, Portainer, Dockge, UniFi, Pi-hole, AdGuard Home, Technitium, Gitea, Home Assistant, Mealie, Immich, qBittorrent, SABnzbd and NZBGet, plus any other JSON API
 - **Alerts to Discord** (or any JSON webhook) when a service goes down or comes back, an app widget shows a warning, or the host runs hot or short of RAM or disk. Checks run on the server, so alerts arrive even when nobody has the page open
 - **24-hour uptime bars** on every checked tile
-- **Upcoming tab**: one calendar combining your Sonarr, Radarr, Lidarr, Readarr and Magarr, grouped by day and marked Downloaded or Missing
+- **Upcoming tab**: one calendar combining your Sonarr, Radarr, Lidarr, Readarr and Magarr, plus bin collection days, grouped by day and marked Downloaded or Missing
 - **System stats bar** for the machine running the dashboard: CPU usage and temperature, free RAM, free space on each disk you list, load and uptime. Turn it on or off in Settings
+- **Bin collection card** showing your next bin day and which bins go out, for 350+ UK councils via [UKBinCollectionData](https://github.com/robbrad/UKBinCollectionData), with an optional reminder alert
 - **Weather widget** showing current conditions and a 3-day forecast, from [Open-Meteo](https://open-meteo.com). It's free and needs no API key
 - **News tab (RSS reader)** showing your RSS and Atom feeds as cards. Switch it on or off in Settings. It comes with sample feeds, including GitHub release feeds so you can see when your self-hosted apps have updates
 - **Find services**: scan your machines for apps that aren't on the dashboard yet, and add them with icons and widgets ready
@@ -168,7 +169,7 @@ Each checked tile shows a thin **24-hour uptime bar**, one segment per 30 minute
 
 ### Upcoming tab
 
-Turn it on with **Settings → Show Upcoming tab**. It combines the calendars of every Sonarr, Radarr, Lidarr, Readarr and Magarr service that already has a widget, reusing the same address and API key, so there's nothing extra to set up.
+Turn it on with **Settings → Show Upcoming tab**. It combines the calendars of every Sonarr, Radarr, Lidarr, Readarr and Magarr service that already has a widget, reusing the same address and API key, so there's nothing extra to set up. [Bin collection days](#bin-collection-card) can appear here too.
 
 - **Layout:** items are grouped by day (Yesterday, Today, Tomorrow…), with air times for TV episodes.
 - **Status badges:** **Downloaded**, or **Missing** once the date has passed.
@@ -177,6 +178,36 @@ Turn it on with **Settings → Show Upcoming tab**. It combines the calendars of
 - **Options:** the tab's **Edit tab** button sets how many days ahead (default 7) and back (default 1) to show, and which apps to include.
 
 Calendars are cached for 10 minutes. **↻ Refresh** fetches them again.
+
+### Bin collection card
+
+Switch it on with **Settings → Show bin collection card**. A card above the tabs (or in a group you choose) shows your next bin day and which bins go out, e.g. **Tomorrow**: ⚫ Black · 🍎 Food Waste, followed by the next few collections. It isn't a service tile, because there's nothing to open.
+
+The data comes from [UKBinCollectionData](https://github.com/robbrad/UKBinCollectionData), which supports over 350 UK councils by reading their websites. It runs as its own container next to Switchboard:
+
+```yaml
+services:
+  ukbins:
+    image: robbrad182/uk-bin-collection:latest   # amd64 only
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+  selenium:                                       # only for councils that need it
+    image: selenium/standalone-chrome:latest
+    restart: unless-stopped
+    shm_size: 2gb
+```
+
+1. Tick **Show bin collection card** in Settings and save. The card's settings open next (later, use the card's **Edit** button in edit mode).
+2. Set **Bin service address** to the container, e.g. `http://192.168.1.10:8080`. **Show it** puts the card above the tabs, on every tab, or in one of your groups, before its services. If that group (or its tab) is deleted, the card moves back above the tabs: the delete confirmation warns you first.
+3. Choose your **Council** from the list. Switchboard fills in its URL, **Skip get URL** and, if it needs one, the **Selenium address**, and says which of postcode, house number or UPRN to fill in ([FindMyAddress](https://www.findmyaddress.co.uk/search) gives your UPRN). A few councils' URLs contain `XXXX` for your property's ID: the note under the list says what to put there.
+4. **Selenium:** the address filled in, `http://selenium:4444`, assumes a container named `selenium`. The bin service connects to it, not Switchboard, so both containers must share a Docker network. The compose file above does that. With separate `docker run` containers, create one with `docker network create bins` and add both with `--network bins`.
+5. **Show in red** picks when the card is highlighted: the day before and on the day, on the day only, or never. If [alerts](#alerts-and-uptime-history) are on, a red card also sends one reminder per collection, e.g. *Bin collection: ⚫ Black, 🍎 Food Waste tomorrow*. You can turn that off in **Alerts**.
+6. Collections also appear on the [Upcoming tab](#upcoming-tab) unless you untick **Also show collections on the Upcoming tab**.
+
+The council list comes from [UKBinCollectionData](https://github.com/robbrad/UKBinCollectionData/wiki/Councils) on GitHub. It's refreshed daily, and a copy is kept in `config/` for when GitHub can't be reached.
+
+Reading a council's website can take a minute, especially through Selenium, so Switchboard fetches in the background and keeps the dates for 6 hours. At first the card may say *still fetching*; it checks again every 20 seconds until the dates arrive. If the council's website is down, the last dates it read stay on the card for up to 3 days.
 
 ### Find services
 

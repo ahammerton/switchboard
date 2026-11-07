@@ -269,6 +269,18 @@ class Monitor:
                                 {"kind": "clear", "title": f"{name}: {label} back to normal ({value})", "service": name},
                             ))
 
+        bins = (cfg.get("homeServices") or {}).get("bins") or {}
+        if ac.get("bins", True) and bins.get("enabled") and "get_home" in self.h:
+            card = self.h["get_home"]().get("bins") or {}
+            following = (card.get("collections") or [None])[0]
+            if following and following.get("warn"):
+                # One reminder per collection day: the key includes the date, and there's no "all clear".
+                kinds = ", ".join(f"{b['icon']} {b['type']}" for b in following["bins"])
+                checks.append((f"bins:{following['date']}", True,
+                               {"kind": "warn", "title": f"{bins.get('title') or 'Bin collection'}: "
+                                                         f"{kinds} {following['when'].lower()}",
+                                "service": bins.get("title") or "Bin collection"}, None))
+
         sysc = cfg.get("system") or {}
         if ac.get("system", True) and sysc.get("enabled"):
             d = self.h["get_system"]()

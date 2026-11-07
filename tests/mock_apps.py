@@ -512,3 +512,61 @@ def custom():
             return b"<html>login page</html>"
         return None
     return handle
+
+
+def _ddmmyyyy(days):
+    return (dt.date.today() + dt.timedelta(days=days)).strftime("%d/%m/%Y")
+
+
+BINS = [  # UKBinCollectionData's output: {"bins": [{"type", "collectionDate": "dd/mm/yyyy"}]}
+    {"type": "Black Bin", "collectionDate": _ddmmyyyy(-2)},  # past: dropped from the tile
+    {"type": "Blue Recycling", "collectionDate": _ddmmyyyy(1)},
+    {"type": "Food Waste", "collectionDate": _ddmmyyyy(1)},
+    {"type": "Black Bin", "collectionDate": _ddmmyyyy(8)},
+    {"type": "Garden", "collectionDate": _ddmmyyyy(3)},
+    {"type": "Blue Recycling", "collectionDate": _ddmmyyyy(15)},
+    {"type": "Odd", "collectionDate": "not a date"},
+]
+
+
+def ukbins(delay=0):
+    """UKBinCollectionData's API server. Records each query in .calls; council "Broken" fails like a
+    scraper error (the real server answers 500), and "url" is required as in its swagger.yaml."""
+    import time
+
+    def handle(r):
+        if not r.path.startswith("/api/bin_collection/"):
+            return None
+        handle.calls.append((r.path.rsplit("/", 1)[1], {k: v[0] for k, v in r.query.items()}))
+        if delay:
+            time.sleep(delay)
+        if not r.q("url"):
+            return 400, {"detail": "Missing query parameter 'url'"}
+        if r.path.endswith("/Broken"):
+            return 500, {"title": "Internal Server Error"}
+        return {"bins": BINS}
+    handle.calls = []
+    return handle
+
+
+COUNCILS = {  # the shape of UKBinCollectionData's uk_bin_collection/tests/input.json
+    "LeedsCityCouncil": {"skip_get_url": True, "uprn": "72506983", "wiki_name": "Leeds", "wiki_note": "Pass the UPRN.",
+                         "url": "https://www.leeds.gov.uk/residents/bins-and-recycling/check-your-bin-day"},
+    "GuildfordCouncil": {"house_number": "THE LODGE", "postcode": "GU3 1AH", "skip_get_url": True,
+                         "url": "https://my.guildford.gov.uk/customers/s/view-bin-collections",
+                         "web_driver": "http://selenium:4444", "wiki_name": "Guildford"},
+    "AdurAndWorthingCouncils": {"url": "https://www.adur-worthing.gov.uk/bin-day/?brlu-selected-address=100061878829",
+                                "wiki_command_url_override": "https://www.adur-worthing.gov.uk/bin-day/?brlu-selected-address=XXXXXXXX",
+                                "wiki_name": "Adur and Worthing",
+                                "wiki_note": "Use [FindMyAddress](https://www.findmyaddress.co.uk/search) to find your UPRN."},
+    "../bad": {"url": "x"},
+    "NotADict": "x",
+}
+
+
+def council_list():
+    def handle(r):
+        handle.calls += 1
+        return COUNCILS if r.path == "/input.json" else None
+    handle.calls = 0
+    return handle

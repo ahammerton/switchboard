@@ -78,7 +78,7 @@ class Ctx:
         return (self.preset, self.base, digest)
 
     def fetch(self, path, *, params=None, headers=None, method="GET", json_body=None,
-              form=None, data=None, opener=None, with_headers=False):
+              form=None, data=None, opener=None, with_headers=False, timeout=TIMEOUT):
         url = path if re.match(r"^https?://", path) else self.base + path
         if params:
             url += ("&" if "?" in url else "?") + urllib.parse.urlencode(params)
@@ -91,7 +91,7 @@ class Ctx:
             hdrs["Content-Type"] = "application/x-www-form-urlencoded"
         req = urllib.request.Request(url, data=data, headers=hdrs, method=method)
         try:
-            with (opener or _default_opener).open(req, timeout=TIMEOUT) as res:
+            with (opener or _default_opener).open(req, timeout=timeout) as res:
                 body = res.read(MAX_BYTES + 1)
                 resp_headers = res.headers
         except urllib.error.HTTPError as e:
@@ -747,6 +747,192 @@ def custom(ctx):
     if not fields:
         raise WidgetError('add at least one field, e.g. "Users = data.users | number"')
     return fields[:6]
+
+
+# ---------------------------------------------------------------- UK bin collection
+#
+# The bin collection card (a "home service", shown above the tabs, not a tile).
+# Reads UKBinCollectionData's API server (github.com/robbrad/UKBinCollectionData),
+# which scrapes the council's website, sometimes through Selenium. That can take a
+# minute, and the dates rarely change, so lookups run in the background and their
+# dates are kept for hours. "Tomorrow" and the highlight are worked out from them
+# on every refresh, so they are always right for today.
+
+BIN_CACHE_SECONDS = 6 * 3600     # how long fetched dates count as fresh
+BIN_STALE_SECONDS = 3 * 86400    # keep showing the last good dates this long if the council's site fails
+BIN_RETRY_SECONDS = 15 * 60      # wait before trying again after a failed lookup
+BIN_TIMEOUT = 180                # one lookup, including a Selenium scrape
+BIN_WAIT = 8                     # how long a refresh waits for a first lookup before saying "still fetching"
+_bins = {}
+_bins_lock = threading.Lock()
+
+BIN_COLOURS = (("black", "⚫"), ("blue", "🔵"), ("green", "🟢"), ("brown", "🟤"), ("purple", "🟣"),
+               ("red", "🔴"), ("yellow", "🟡"), ("orange", "🟠"), ("white", "⚪"))
+BIN_KINDS = (("recycl", "♻️"), ("garden", "🌿"), ("food", "🍎"), ("glass", "🍾"), ("paper", "📰"),
+             ("card", "📦"), ("plastic", "🧴"))
+BIN_HIGHLIGHT = {"dayBefore": 1, "onTheDay": 0, "never": None}
+
+
+def bin_icon(kind):
+    """An emoji for a bin type: its colour if the name says one, else what goes in it."""
+    k = kind.lower()
+    for words in (BIN_COLOURS, BIN_KINDS):
+        for word, icon in words:
+            if word in k:
+                return icon
+    return "🗑️"
+
+
+def bin_when(day, today):
+    n = (day - today).days
+    if n == 0:
+        return "Today"
+    if n == 1:
+        return "Tomorrow"
+    return f"{day:%a}" if 1 < n < 7 else f"{day:%a} {day.day} {day:%b}"
+
+
+def _parse_bins(data):
+    if not isinstance(data, dict) or not isinstance(data.get("bins"), list):
+        raise WidgetError("unexpected response: is this UKBinCollectionData's API server?")
+    found = set()
+    for b in data["bins"]:
+        if not isinstance(b, dict):
+            continue
+        try:
+            day = datetime.datetime.strptime(str(b.get("collectionDate") or "").strip()[:10], "%d/%m/%Y").date()
+        except ValueError:
+            continue
+        found.add((day, str(b.get("type") or "").strip() or "Bin"))
+    return sorted(found)
+
+
+def _bin_lookup(ctx, entry, path, params):
+    try:
+        dates, error = _parse_bins(ctx.json(path, params=params, timeout=BIN_TIMEOUT)), None
+    except WidgetError as e:
+        driver = params.get("web_driver", "")
+        selenium = f", and that the bin service can reach Selenium at {driver}" if driver else ""
+        if re.match(r"^\w+://(localhost|127\.0\.0\.1|\[::1\])(:|/|$)", driver):
+            selenium += (". “localhost” there means the bin service's own container: use the Selenium "
+                         "container's name instead, e.g. http://selenium:4444")
+        dates, error = None, {
+            500: "UKBinCollectionData couldn't read your council's website: check the council, URL and "
+                 f"address settings{selenium} (the bin service's log has the details)",
+            404: "UKBinCollectionData's API wasn't found here: check the service URL (usually port 8080)",
+        }.get(e.status, str(e))
+    except Exception as e:  # a background thread must never die silently
+        dates, error = None, f"bin lookup failed ({type(e).__name__})"
+    with _bins_lock:
+        now = time.time()
+        entry.update(tried=now, running=None, error=error)
+        if dates is not None:
+            entry.update(dates=dates, fetched=now)
+
+
+def retry_failed_bin_lookups():
+    """Let failed lookups run again on the next refresh, e.g. after the settings are saved
+    (the fix may have been outside Switchboard, such as starting Selenium)."""
+    with _bins_lock:
+        for entry in _bins.values():
+            if entry["error"] and not entry["running"]:
+                entry["tried"] = 0
+
+
+def bin_dates(ctx):
+    """[(date, bin type), ...] from the bin service, sorted. Starts a background lookup when needed."""
+    council = ctx.need("council", "Council")
+    params = {"url": ctx.need("councilUrl", "Council URL")}
+    for opt, name in (("postcode", "postcode"), ("number", "house_number"), ("uprn", "uprn"),
+                      ("usrn", "usrn"), ("webDriver", "web_driver")):
+        value = str(ctx.opt.get(opt) or "").strip()
+        if value:
+            params[name] = value
+    if ctx.opt.get("skipGetUrl") in (True, "yes", "true"):
+        params["skip_get_url"] = "true"
+    path = "/api/bin_collection/" + urllib.parse.quote(council.strip(), safe="")
+    key = ctx.session_key(path, json.dumps(params, sort_keys=True))
+    with _bins_lock:
+        now = time.time()
+        entry = _bins.setdefault(key, {"dates": None, "fetched": 0, "tried": 0, "error": None, "running": None})
+        fresh = entry["dates"] is not None and now - entry["fetched"] < BIN_CACHE_SECONDS
+        backoff = BIN_RETRY_SECONDS if entry["error"] else 0
+        if not fresh and not entry["running"] and now - entry["tried"] >= backoff:
+            entry["running"] = threading.Thread(target=_bin_lookup, args=(ctx, entry, path, params), daemon=True)
+            entry["running"].start()
+        running = entry["running"]
+    if running and entry["dates"] is None:
+        running.join(BIN_WAIT)
+    with _bins_lock:
+        dates, fetched, error = entry["dates"], entry["fetched"], entry["error"]
+    if dates is not None and time.time() - fetched < BIN_STALE_SECONDS:
+        return dates
+    if error:
+        raise WidgetError(error)
+    raise WidgetError("still fetching from your council's website: this can take a minute")
+
+
+def parse_councils(raw):
+    """UKBinCollectionData's council list (its tests/input.json, which its wiki is built from)
+    → [{id, name, url, skipGetUrl, selenium, needs, note, placeholder}], sorted by name.
+    url is the one the wiki's command uses; "needs" lists the address fields its example uses."""
+    if not isinstance(raw, dict):
+        raise ValueError("the council list isn't a JSON object")
+    councils = []
+    for cid, c in raw.items():
+        if not isinstance(c, dict) or not re.fullmatch(r"[A-Za-z0-9_]{1,80}", cid):
+            continue
+        url = str(c.get("wiki_command_url_override") or c.get("url") or "")
+        needs = [field for field, keys in (("postcode", ("postcode",)), ("number", ("house_number", "paon")),
+                                           ("uprn", ("uprn",)), ("usrn", ("usrn",)))
+                 if any(k in c for k in keys)]
+        councils.append({
+            "id": cid, "name": str(c.get("wiki_name") or cid)[:120], "url": url[:500],
+            "skipGetUrl": bool(c.get("skip_get_url")), "selenium": "web_driver" in c,
+            "needs": needs, "note": str(c.get("wiki_note") or "")[:800], "placeholder": "XXX" in url,
+        })
+    return sorted(councils, key=lambda c: c["name"].lower())
+
+
+def _bins_ctx(conf):
+    base = str(conf.get("url") or "").strip()
+    if not re.match(r"^https?://", base):
+        raise WidgetError("set the bin service's address, e.g. http://192.168.1.10:8080")
+    return Ctx("ukbins", base, conf, {})
+
+
+def bins_card(conf):
+    """The bin collection card: up to 4 collection days from today, each with its bins."""
+    try:
+        dates = bin_dates(_bins_ctx(conf))
+    except WidgetError as e:
+        return {"error": str(e)}
+    except Exception as e:  # never break the page over one card
+        return {"error": f"bin lookup failed ({type(e).__name__})"}
+    today = datetime.date.today()
+    days = {}
+    for day, kind in dates:
+        if day >= today:
+            days.setdefault(day, []).append({"type": kind, "icon": bin_icon(kind)})
+    warn_days = BIN_HIGHLIGHT.get(conf.get("highlight") or "dayBefore", 1)
+    return {"collections": [
+        {"date": day.isoformat(), "when": bin_when(day, today), "bins": bins,
+         "warn": warn_days is not None and (day - today).days <= warn_days}
+        for day, bins in sorted(days.items())[:4]]}
+
+
+def bins_calendar(conf, start, end):
+    """Upcoming-tab items for the bin collection card. Returns {"items": [...]} or {"error": "..."}."""
+    try:
+        dates = bin_dates(_bins_ctx(conf))
+    except WidgetError as e:
+        return {"error": str(e)}
+    except Exception as e:
+        return {"error": f"bin lookup failed ({type(e).__name__})"}
+    return {"items": [
+        {"date": day.isoformat(), "allDay": True, "kind": "bin", "icon": bin_icon(kind), "title": kind,
+         "detail": "Bin collection", "noStatus": True, "link": conf.get("councilUrl") or ""}
+        for day, kind in dates if start.date() <= day < end.date()]}
 
 
 # ---------------------------------------------------------------- registry

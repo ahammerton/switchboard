@@ -26,6 +26,7 @@ def warns(result):
 class WidgetTest(unittest.TestCase):
     def setUp(self):
         widgets._sessions.clear()  # Pi-hole SIDs and qBittorrent/UniFi cookies are cached per process
+        widgets._bins.clear()  # and bin collection dates
         self.mocks = []
 
     def tearDown(self):
@@ -307,6 +308,118 @@ class EngineTests(WidgetTest):
             self.assertTrue(p["name"] and p["group"], pid)
 
 
+BIN_CONF = {"council": "LeedsCityCouncil", "councilUrl": "https://council.example/bins", "postcode": "LS1 2JG"}
+
+
+class BinTests(WidgetTest):
+    """The bin collection card (a home service) against a mock UKBinCollectionData API server."""
+
+    def card(self, app, **conf):
+        return widgets.bins_card({**BIN_CONF, "url": app.url, **conf})
+
+    def test_card_groups_bins_by_collection_day(self):
+        today = dt.date.today()
+        r = self.card(self.mock(apps.ukbins()))
+        days = [(c["date"], c["when"], [(b["icon"], b["type"]) for b in c["bins"]], c["warn"]) for c in r["collections"]]
+        self.assertEqual(days, [
+            ((today + dt.timedelta(days=1)).isoformat(), "Tomorrow", [("🔵", "Blue Recycling"), ("🍎", "Food Waste")], True),
+            ((today + dt.timedelta(days=3)).isoformat(), widgets.bin_when(today + dt.timedelta(days=3), today), [("🌿", "Garden")], False),
+            ((today + dt.timedelta(days=8)).isoformat(), widgets.bin_when(today + dt.timedelta(days=8), today), [("⚫", "Black Bin")], False),
+            ((today + dt.timedelta(days=15)).isoformat(), widgets.bin_when(today + dt.timedelta(days=15), today), [("🔵", "Blue Recycling")], False),
+        ])  # the past collection and the unreadable date are left out
+
+    def test_highlight_choice(self):
+        app = self.mock(apps.ukbins())
+        self.assertFalse(self.card(app, highlight="onTheDay")["collections"][0]["warn"])
+        self.assertFalse(self.card(app, highlight="never")["collections"][0]["warn"])
+
+    def test_settings_are_passed_to_the_bin_service(self):
+        app = apps.ukbins()
+        self.card(self.mock(app), number="41", uprn="123", webDriver="http://selenium:4444", skipGetUrl=True)
+        council, query = app.calls[0]
+        self.assertEqual(council, "LeedsCityCouncil")
+        self.assertEqual(query, {"url": "https://council.example/bins", "postcode": "LS1 2JG", "house_number": "41",
+                                 "uprn": "123", "web_driver": "http://selenium:4444", "skip_get_url": "true"})
+
+    def test_dates_are_cached_and_shared_with_the_calendar(self):
+        app = apps.ukbins()
+        mock = self.mock(app)
+        self.card(mock)
+        self.card(mock)
+        widgets.bins_calendar({**BIN_CONF, "url": mock.url}, *CalendarTests.window(None))
+        self.assertEqual(len(app.calls), 1)
+
+    def test_a_slow_first_lookup_says_still_fetching_then_shows_the_dates(self):
+        app = apps.ukbins(delay=0.5)
+        mock = self.mock(app)
+        old = widgets.BIN_WAIT
+        widgets.BIN_WAIT = 0.05
+        try:
+            self.assertIn("still fetching", self.card(mock)["error"])
+            for entry in widgets._bins.values():
+                entry["running"].join(5)
+            self.assertEqual(len(self.card(mock)["collections"]), 4)
+        finally:
+            widgets.BIN_WAIT = old
+        self.assertEqual(len(app.calls), 1)  # the second refresh didn't start another lookup
+
+    def test_council_errors_are_explained_and_not_retried_straight_away(self):
+        app = apps.ukbins()
+        mock = self.mock(app)
+        self.assertIn("couldn't read your council's website", self.card(mock, council="Broken")["error"])
+        self.assertIn("couldn't read your council's website", self.card(mock, council="Broken")["error"])
+        self.assertEqual(len(app.calls), 1)
+        widgets.retry_failed_bin_lookups()  # saving the settings tries again straight away
+        self.card(mock, council="Broken")
+        self.assertEqual(len(app.calls), 2)
+
+    def test_selenium_is_mentioned_when_one_is_set(self):
+        r = self.card(self.mock(apps.ukbins()), council="Broken", webDriver="http://selenium:4444")
+        self.assertIn("can reach Selenium at http://selenium:4444", r["error"])
+        self.assertNotIn("localhost", r["error"])
+        r = self.card(self.mock(apps.ukbins()), council="Broken", webDriver="http://localhost:4444")
+        self.assertIn("use the Selenium container's name instead, e.g. http://selenium:4444", r["error"])
+
+    def test_last_good_dates_are_kept_when_a_later_lookup_fails(self):
+        mock = self.mock(apps.ukbins())
+        self.card(mock)
+        mock.close()  # the bin service goes away
+        for entry in widgets._bins.values():
+            entry["fetched"] -= widgets.BIN_CACHE_SECONDS + 1
+        self.assertIn("collections", self.card(mock))
+        for entry in widgets._bins.values():
+            if entry["running"]:
+                entry["running"].join(5)
+        self.assertIn("collections", self.card(mock))
+
+    def test_needs_an_address_a_council_and_the_right_service(self):
+        app = self.mock(apps.ukbins())
+        self.assertIn("bin service's address", widgets.bins_card(BIN_CONF)["error"])
+        self.assertIn("Council is not set", self.card(app, council="")["error"])
+        self.assertIn("Council URL is not set", self.card(app, councilUrl="")["error"])
+        self.assertIn("wasn't found here", self.card(self.mock(apps.custom()))["error"])
+
+    def test_bin_icons(self):
+        self.assertEqual([widgets.bin_icon(k) for k in ("Green Garden Waste", "Mixed recycling", "Glass", "Refuse")],
+                         ["🟢", "♻️", "🍾", "🗑️"])
+
+    def test_council_list(self):
+        councils = widgets.parse_councils(apps.COUNCILS)
+        self.assertEqual([c["name"] for c in councils], ["Adur and Worthing", "Guildford", "Leeds"])
+        adur, guildford, leeds = councils
+        self.assertEqual(guildford, {
+            "id": "GuildfordCouncil", "name": "Guildford", "url": "https://my.guildford.gov.uk/customers/s/view-bin-collections",
+            "skipGetUrl": True, "selenium": True, "needs": ["postcode", "number"], "note": "", "placeholder": False})
+        self.assertEqual((leeds["needs"], leeds["selenium"]), (["uprn"], False))
+        # the wiki's URL, with its placeholder, not the sample property's own URL
+        self.assertTrue(adur["url"].endswith("=XXXXXXXX") and adur["placeholder"] and not adur["skipGetUrl"])
+        with self.assertRaises(ValueError):
+            widgets.parse_councils([])
+
+    def test_not_a_tile_widget(self):
+        self.assertNotIn("ukbins", widgets.PRESETS)
+
+
 class CalendarTests(WidgetTest):
     def window(self):
         today = dt.datetime.now().astimezone().replace(hour=0, minute=0, second=0, microsecond=0)
@@ -339,6 +452,14 @@ class CalendarTests(WidgetTest):
         issue = self.calendar("magarr", apps.magarr())[0]
         self.assertEqual((issue["title"], issue["detail"], issue["kind"]), ("Magazine A", "November", "magazine"))
         self.assertTrue(issue["link"].endswith("/magazine/7"))
+
+    def test_bin_collections_inside_the_window(self):
+        app = self.mock(apps.ukbins())
+        items = widgets.bins_calendar({**BIN_CONF, "url": app.url}, *self.window())["items"]
+        self.assertEqual([i["title"] for i in items], ["Blue Recycling", "Food Waste", "Garden"])  # day 8 and 15 are outside
+        self.assertEqual((items[0]["kind"], items[0]["icon"], items[0]["allDay"], items[0]["noStatus"]),
+                         ("bin", "🔵", True, True))
+        self.assertEqual(items[0]["link"], "https://council.example/bins")
 
     def test_not_a_calendar_app(self):
         self.assertIn("error", widgets.calendar({"type": "plex"}, "http://x", {}, *self.window()))

@@ -6,6 +6,12 @@ and versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-11-07
+
+### Added
+
+- **Bin collection card.** Turn it on in Settings, and a card above the tabs, or in a group you choose, shows your next bin day and which bins go out, followed by the next few collections. It works for 350+ UK councils, using [UKBinCollectionData](https://github.com/robbrad/UKBinCollectionData)'s API server as a separate container. Collections can also appear on the Upcoming tab, the card turns red the day before (or on the day, or never), and alerts can send one reminder per collection. You choose your council from a list (UKBinCollectionData's, refreshed daily), which fills in its URL, Skip get URL and Selenium settings and says which address details it needs. Council websites are read in the background and the dates are kept for 6 hours, so a slow council never holds up the page.
+
 ## [0.3.0] - 2026-11-04
 
 ### Added
@@ -92,7 +98,8 @@ The first public release.
 - **Changes are only accepted from the dashboard's own page.** The browser's `Origin` and `Sec-Fetch-Site` headers are checked, and request bodies must be JSON. This blocks cross-site request forgery.
 - **Requests for unknown public host names are refused**, which blocks DNS rebinding. Add the names you use, such as reverse-proxy domains, to `ALLOWED_HOSTS`.
 
-[Unreleased]: https://github.com/ahammerton/switchboard/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/ahammerton/switchboard/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/ahammerton/switchboard/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/ahammerton/switchboard/compare/v0.2.2...v0.3.0
 [0.2.2]: https://github.com/ahammerton/switchboard/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/ahammerton/switchboard/compare/v0.2.0...v0.2.1
