@@ -23,7 +23,8 @@ jobs:
     # GitHub only: the Gitea mirror could also run .github/workflows, but can't publish.
     # (The image job needs this one, so it's skipped too.)
     if: github.repository_owner == 'ahammerton'
-    runs-on: ubuntu-latest
+    # Ubuntu 26.04 (ubuntu-latest since October 2026) has no Python 3.9, so 3.9 runs on 24.04.
+    runs-on: ${{ matrix.python == '3.9' && 'ubuntu-24.04' || 'ubuntu-latest' }}
     strategy:
       fail-fast: false
       matrix:
