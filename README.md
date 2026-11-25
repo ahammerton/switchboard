@@ -78,7 +78,7 @@ To report a vulnerability privately, see [SECURITY.md](SECURITY.md).
 - **Other websites can't use it.** Changes are only accepted from the dashboard's own page: the browser's `Origin` and `Sec-Fetch-Site` headers are checked, and requests must be JSON. So a web page you visit can't quietly make your server scan the network or fetch URLs. Scripts and `curl` still work, with the token.
 - **DNS rebinding is blocked.** The server only answers under host names it knows (see `ALLOWED_HOSTS`). This stops a malicious site from pointing its own domain at your server to read your config. If you open the dashboard through a public domain, for example a reverse-proxy name like `dash.example.com`, add it to `ALLOWED_HOSTS`, or you'll get an error page naming the setting.
 - **Secrets.** API keys and the alert webhook are kept in `config/secrets.json` and the token in `config/edit-token`, both readable only by the server (`600`). They're never sent to the browser, and they're not encrypted, so protect the `config` folder like any other password store.
-- **Certificates.** Status checks and widgets don't verify TLS certificates, because most lab services use self-signed ones. RSS feeds and weather are fetched normally.
+- **Certificates.** Status checks, widgets, the bin service, RSS feeds, Find services and non-Discord alert webhooks don't verify TLS certificates, because most lab services use self-signed ones. Discord, weather and the council list are verified.
 
 ### Install as an app
 
