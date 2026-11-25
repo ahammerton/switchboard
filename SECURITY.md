@@ -6,7 +6,8 @@ Security fixes are made for the latest release only. Please check that a problem
 
 | Version | Supported |
 |---|---|
-| 0.1.x | ✅ |
+| 0.3.x | ✅ |
+| 0.2.x and older | ❌ |
 
 ## Reporting a vulnerability
 
@@ -38,10 +39,10 @@ These are **by design**, and not vulnerabilities:
 
 - **Anyone who can open the dashboard can view it.** Only changes need the edit token.
 - **`EDIT_TOKEN=off` turns protection off.** It's an explicit opt-out.
-- **TLS certificates aren't verified** for status checks and widgets, because most lab services use self-signed ones.
+- **TLS certificates aren't verified** for status checks, widgets, the bin service, RSS feeds, Find services and non-Discord alert webhooks, because most lab services use self-signed ones. They are verified for Discord, weather and the council list.
 - **Secrets are stored unencrypted** in the `config` folder, with file permissions limited to the server's user.
 - **Exposing Switchboard directly to the internet isn't supported.** Problems that only arise that way are still welcome as reports, but may be treated as hardening rather than as vulnerabilities.
-- **Widgets and Find services make requests** to the addresses configured in them, or entered in Find services. Both need the edit token.
+- **The server makes requests** to the addresses set up in it (services, widgets, RSS feeds, the bin service and the alert webhook), and to those entered in Find services. Changing any of these, and running Find services, needs the edit token.
 
 ## Security features
 
